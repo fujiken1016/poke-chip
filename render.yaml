@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: poke-chip
+    runtime: node
+    plan: free
+    buildCommand: "true"
+    startCommand: node server.js
+    envVars:
+      - key: TURN_SECONDS
+        value: "20"
+    autoDeploy: true
