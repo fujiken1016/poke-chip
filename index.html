@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ポケチップ 🃏</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ホーム画面 -->
+<div id="home" class="screen">
+  <div class="home-inner">
+    <h1>POKE CHIP<span class="logo-ja">ポケチップ</span></h1>
+    <p class="tagline">スマホがチップになる。トランプがなくてもポーカー。</p>
+
+    <label>ニックネーム</label>
+    <input id="name" maxlength="12" placeholder="例: フジケン" autocomplete="off">
+
+    <div class="card-box">
+      <h2>開催中のルーム <button id="btnRoomsRefresh" class="ghost small" style="float:right">↻ 更新</button></h2>
+      <div id="roomList"><div class="rl-empty">読み込み中…</div></div>
+    </div>
+
+    <div class="card-box">
+      <h2>ルームに参加</h2>
+      <div class="row">
+        <input id="joinCode" maxlength="80" placeholder="コード（例: AB12）or 招待URL" autocomplete="off" style="text-transform:uppercase">
+        <button id="btnJoin" class="primary">参加</button>
+      </div>
+      <label>バイイン（持ち点）※必須</label>
+      <input id="joinStack" type="number" inputmode="numeric" value="10000" required>
+      <label class="spec-check"><input type="checkbox" id="specChk"> 👁 観戦者として参加（バイイン不要・全ハンドとエクイティが見える）</label>
+      <p id="joinErr" class="err"></p>
+    </div>
+
+    <div class="card-box">
+      <h2>ルームを作る（あなたがディーラー）</h2>
+      <label>ルーム名</label>
+      <input id="roomTitleInput" maxlength="20" placeholder="例: 夏合宿ポーカー（空欄なら「◯◯の卓」）" autocomplete="off">
+      <label>モード</label>
+      <div class="mode-select">
+        <label class="mode-opt"><input type="radio" name="mode" value="full" checked>
+          <span><b>フルモード</b><small>カード配布＋役の自動判定まで全部アプリで</small></span>
+        </label>
+        <label class="mode-opt"><input type="radio" name="mode" value="chip">
+          <span><b>チップモード</b><small>リアルのトランプ併用。チップ・ポット管理だけアプリで</small></span>
+        </label>
+      </div>
+      <div class="row three">
+        <div><label>SB</label><input id="sb" type="number" value="50" min="1"></div>
+        <div><label>BB</label><input id="bb" type="number" value="100" min="1"></div>
+        <div><label>初期スタック</label><input id="stack" type="number" value="10000" min="100"></div>
+      </div>
+      <label>アクション時間（秒）… 5〜300</label>
+      <input id="turnSec" type="number" value="20" min="5" max="300">
+      <button id="btnCreate" class="primary wide">ルーム作成</button>
+      <p id="createErr" class="err"></p>
+    </div>
+  </div>
+</div>
+
+<!-- テーブル画面 -->
+<div id="table" class="screen hidden">
+  <header>
+    <div class="hdr-left">
+      <div id="roomTitle" class="room-title"></div>
+      <div><span id="roomCode" class="code"></span><span id="myName" class="chip-label myname"></span><span id="blinds" class="chip-label"></span><span id="modeLabel" class="chip-label"></span></div>
+    </div>
+    <div class="hdr-right">
+      <button id="btnInvite" class="ghost small">🔗</button>
+      <button id="btnMute" class="ghost small">🔊</button>
+      <button id="btnLeave" class="ghost small">退出</button>
+    </div>
+  </header>
+
+  <div id="playersHead"></div>
+
+  <!-- ポーカーテーブル -->
+  <div id="tableWrap">
+    <div id="felt">
+      <div id="phaseLabel"></div>
+      <div id="potLine">🟡 <b id="potAmt">0</b></div>
+      <div id="board" class="cards"></div>
+      <div id="inviteHint" class="hidden">
+        <div class="ih-code"></div>
+        <button id="btnInvite2" class="primary small">🔗 招待リンクをコピー</button>
+      </div>
+      <div id="feltInfo"></div>
+    </div>
+    <div id="seats"></div>
+  </div>
+  <div id="resultBox" class="hidden"></div>
+
+  <!-- ランイット選択（オールイン時） -->
+  <div id="ritPanel" class="panel hidden"></div>
+
+  <!-- ショーダウン割当（チップモード・ディーラー用） -->
+  <div id="potAssign" class="panel hidden"></div>
+
+  <!-- ディーラーパネル -->
+  <details id="dealerPanel" class="panel hidden">
+    <summary>🎩 ディーラー操作</summary>
+    <div id="dealerBtns" class="dealer-btns"></div>
+    <div id="dealerPlayers"></div>
+  </details>
+
+  <!-- 収支（全員に見える・初期展開） -->
+  <details class="panel" open>
+    <summary>💰 収支（全員に公開）</summary>
+    <div id="ledger"></div>
+  </details>
+
+  <!-- ログ -->
+  <details class="panel">
+    <summary>📜 ログ</summary>
+    <div id="log"></div>
+  </details>
+
+  <!-- 自分の手札＋アクションバー -->
+  <footer id="actionArea">
+    <div id="myInfo">
+      <div id="myHandRank" class="hand-rank hidden"></div>
+      <div id="myStackLine">スタック <b id="myStack">0</b></div>
+    </div>
+    <div id="turnBanner" class="hidden">▶ YOUR TURN ◀</div>
+    <div id="turnMeter" class="tmeter big hidden"><div class="tmeter-fill"></div></div>
+    <div id="actions" class="hidden">
+      <button id="btnFold" class="act fold">フォールド</button>
+      <button id="btnCheckCall" class="act call"></button>
+      <button id="btnRaiseOpen" class="act raise">レイズ</button>
+    </div>
+    <div id="raiseRow" class="hidden">
+      <div class="raise-quick">
+        <button data-q="third">1/3ポット</button>
+        <button data-q="half">1/2ポット</button>
+        <button data-q="pot">ポット</button>
+        <button data-q="allin">オールイン</button>
+      </div>
+      <div class="row">
+        <input id="raiseTo" type="number" inputmode="numeric">
+        <button id="btnRaise" class="primary">ベット</button>
+        <button id="btnRaiseCancel" class="ghost">×</button>
+      </div>
+    </div>
+  </footer>
+  <p id="tableErr" class="err"></p>
+</div>
+
+<!-- 招待モーダル -->
+<div id="inviteModal" class="hidden">
+  <div class="im-box">
+    <div class="im-title">🔗 友達を招待</div>
+    <div class="im-code"></div>
+    <input id="inviteUrl" readonly>
+    <div class="im-btns">
+      <button id="btnCopyUrl" class="primary">URLをコピー</button>
+      <button id="btnShare" class="hidden">共有…</button>
+      <button id="btnInviteClose" class="ghost">閉じる</button>
+    </div>
+    <div class="im-note">リンクを開くとコード入力済みの参加画面になります。コードを口頭で伝えてもOK</div>
+  </div>
+</div>
+
+<!-- カットイン演出 -->
+<div id="cutin" class="hidden">
+  <div id="cutinBand" class="cutin-band">
+    <span id="cutinName" class="cutin-name"></span>
+    <span id="cutinText" class="cutin-text"></span>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
