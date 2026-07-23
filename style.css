@@ -140,7 +140,7 @@ header {
   z-index: 2;
 }
 #felt {
-  position: absolute; inset: 2.5% 12%;
+  position: absolute; inset: 2.5% 8%;
   border-radius: 9999px;
   background: radial-gradient(ellipse at 50% 30%, #27509d, #1b3a78 62%, #142c5e 100%);
   border: 11px solid #141c3f;
@@ -241,7 +241,18 @@ header {
   position: absolute; transform: translate(-50%, -50%);
   width: 96px; display: flex; flex-direction: column; align-items: center;
   transition: opacity .2s;
+  z-index: 3; /* ベットチップより常に手前（手札が隠れないように） */
 }
+/* 多人数（7人以上）はプレート・アバターを縮小して被りを防ぐ */
+#seats.compact .tseat { width: 74px; }
+#seats.compact .avatar { width: 32px; height: 32px; font-size: 17px; border-width: 2px; }
+#seats.compact .plate { min-width: 62px; padding: 5px 5px 3px; }
+#seats.compact .plate .pnm { font-size: 9px; }
+#seats.compact .plate .pstk { font-size: 10.5px; }
+#seats.compact .bet-bubble { font-size: 10px; padding: 1px 6px 1px 4px; }
+#seats.compact .tcards .pcard.small { width: 20px; height: 28px; }
+#seats.compact .tcards .pcard.small .crank { font-size: 12px; }
+#seats.compact .tseat .tag { font-size: 8.5px; padding: 1px 7px; top: -26px; }
 .tseat.folded { opacity: .45; filter: grayscale(.9); }
 .tseat.sitout { opacity: .4; }
 .tcards {
@@ -250,9 +261,9 @@ header {
 }
 .tcards .pcard.small { width: 24px; height: 34px; }
 .tcards .pcard.small .crank { font-size: 15px; }
-/* 表向きのカードはアバターより前面に（隠れ防止） */
-.tcards.up { z-index: 2; top: -32px; }
-.tcards.mine { top: -50px; gap: 0; z-index: 2; }
+/* 表向きのカードはアバター・チップより前面に（隠れ防止） */
+.tcards.up { z-index: 6; top: -32px; }
+.tcards.mine { top: -50px; gap: 0; z-index: 6; }
 .tcards.mine .pcard.small { width: 42px; height: 58px; border-radius: 7px; box-shadow: 0 4px 10px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(255, 255, 255, .18); }
 .tcards.mine .pcard.small .crank { font-size: 27px; }
 .tcards.mine .pcard.small .csuit { font-size: 11px; }
@@ -305,8 +316,10 @@ header {
 .blindbadge.sb { background: var(--blue); color: #fff; }
 .blindbadge.bb { background: var(--mag); color: #fff; }
 /* アクションピル */
+/* 自分の席は手札が大きいので、タグをその上に出す */
+.tseat:has(.tcards.mine) .tag { top: -92px; }
 .tseat .tag {
-  position: absolute; top: -30px; left: 50%; transform: translateX(-50%); z-index: 2;
+  position: absolute; top: -30px; left: 50%; transform: translateX(-50%); z-index: 7;
   font-size: 10px; padding: 3px 12px; font-weight: 900; font-style: italic; letter-spacing: 1px;
   border-radius: 999px; background: #3a4364; color: #cdd9f5; white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0, 0, 0, .4);
@@ -321,7 +334,7 @@ header {
 .tseat .tag.allin { background: linear-gradient(100deg, var(--mag), #b3123f); color: #fff; box-shadow: 0 0 12px rgba(255, 46, 126, .7); }
 /* どうする？吹き出し */
 .saybubble {
-  position: absolute; top: -62px; left: 50%; transform: translateX(-50%); z-index: 3;
+  position: absolute; top: -92px; left: 50%; transform: translateX(-50%); z-index: 7;
   background: #fff; color: var(--navy); font-weight: 900; font-size: 12px;
   padding: 5px 14px; border-radius: 16px; white-space: nowrap;
   box-shadow: 0 3px 10px rgba(0, 0, 0, .4), 0 0 14px rgba(0, 229, 255, .3);
@@ -350,6 +363,7 @@ header {
   font-size: 11.5px; font-weight: 900; color: var(--navy);
   background: #fff; border-radius: 999px; padding: 2px 9px 2px 5px; white-space: nowrap;
   box-shadow: 0 2px 6px rgba(0, 0, 0, .4), 0 0 10px rgba(0, 229, 255, .2);
+  z-index: 1; /* 手札・プレートより後ろ */
 }
 .bet-bubble.bump { animation: bump .3s cubic-bezier(.2, .9, .3, 1.6); }
 @keyframes bump { 0% { transform: translate(-50%, -50%) scale(1.7); } 100% { transform: translate(-50%, -50%); } }
@@ -448,6 +462,25 @@ footer {
 #raiseRow { margin-top: 8px; }
 .raise-quick { display: flex; gap: 7px; margin-bottom: 7px; }
 .raise-quick button { flex: 1; font-size: 12px; padding: 9px 2px; background: linear-gradient(150deg, #253a6e, #1b2a52); }
+/* ベットスライダー */
+.raise-slider { width: 100%; margin: 4px 0 8px; -webkit-appearance: none; appearance: none; height: 22px; background: transparent; }
+.raise-slider::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--neon), var(--mag)); }
+.raise-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px rgba(0, 229, 255, .7); cursor: pointer; }
+.raise-slider::-moz-range-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--neon), var(--mag)); }
+.raise-slider::-moz-range-thumb { width: 20px; height: 20px; border: none; border-radius: 50%; background: #fff; cursor: pointer; }
+/* 事前アクション */
+#preActions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+.pa-opt { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--dim); background: rgba(7, 11, 24, .5); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.pa-opt:has(input:checked) { border-color: var(--neon); color: var(--text); background: rgba(0, 229, 255, .1); }
+.pa-opt input { width: auto; }
+#btnShowCards, #btnUnsit { width: 100%; margin-top: 8px; }
+/* ハンド履歴 */
+#handHistory { margin-top: 6px; max-height: 220px; overflow-y: auto; }
+.hh-item { padding: 6px 0; border-bottom: 1px dashed #1e2c55; font-size: 12px; }
+.hh-head { font-weight: 800; color: var(--neon); font-style: italic; }
+.hh-board { color: var(--gold); font-weight: 700; margin-left: 6px; }
+.hh-hands { color: var(--dim); font-size: 11px; margin: 2px 0; }
+.hh-win { color: var(--text); }
 
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
 .dot.on { background: var(--green); box-shadow: 0 0 6px rgba(43, 255, 158, .8); }

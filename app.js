@@ -93,7 +93,7 @@ function showCutin(a) {
     }
   }
   const fn = CUTIN_TEXT[a.kind];
-  if (!fn) return;
+  if (!fn) return 0;
   const band = $('cutinBand');
   $('cutinName').textContent = a.name || '';
   $('cutinText').textContent = fn(a);
@@ -102,8 +102,31 @@ function showCutin(a) {
   void band.offsetWidth; // アニメーション再トリガー
   const sndKey = a.kind === 'win' && a.othersWin ? 'phase' : CUTIN_SND[a.kind];
   if (sndKey) SND[sndKey]();
+  const dur = a.kind === 'win' ? 1600 : a.kind === 'allin' ? 1250 : 1000;
   clearTimeout(cutinTimer);
-  cutinTimer = setTimeout(() => $('cutin').classList.add('hidden'), a.kind === 'win' ? 1500 : a.kind === 'allin' ? 1250 : 1000);
+  cutinTimer = setTimeout(() => $('cutin').classList.add('hidden'), dur);
+  return dur;
+}
+
+// ---------- 演出キュー（1更新で複数イベントでも順番に見せる） ----------
+let cutinQueue = [], cutinBusy = false;
+function enqueueCutins(evs) {
+  cutinQueue.push(...evs);
+  if (!cutinBusy) playNextCutin();
+}
+function playNextCutin() {
+  const ev = cutinQueue.shift();
+  if (!ev) {
+    cutinBusy = false;
+    render(); // 演出が終わってから結果表示を出す
+    return;
+  }
+  cutinBusy = true;
+  const dur = showCutin(ev) || 0;
+  // 溜まっている時は早送り（最後の1件＝勝敗などはしっかり見せる）
+  const backlog = cutinQueue.length;
+  const wait = dur ? (backlog >= 3 ? Math.min(dur, 420) : backlog >= 1 ? Math.min(dur, 750) : dur) + 150 : 0;
+  setTimeout(playNextCutin, wait);
 }
 
 // ---------- ポットのカウントアップ／ダウン ----------
@@ -313,6 +336,13 @@ const avatarColor = name => `hsl(${nameHash(name) % 360}, 40%, 38%)`;
 
 // 数値の3桁区切り表示
 const fmt = n => Number(n).toLocaleString('en-US');
+// 席プレート/チップ用の短縮表示（大きい額でプレート幅が崩れないように）
+const fmtShort = n => {
+  n = Number(n);
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
+  if (Math.abs(n) >= 1e5) return (n / 1e3).toFixed(0) + 'K';
+  return n.toLocaleString('en-US');
+};
 
 // ---------- 手役のリアルタイム判定（クライアント側） ----------
 const RANK_NAME = r => ({ 14: 'A', 13: 'K', 12: 'Q', 11: 'J', 10: '10' }[r] || String(r));
@@ -383,10 +413,17 @@ function render() {
   const you = v.you;
   const betting = ['preflop', 'flop', 'turn', 'river'].includes(v.phase);
 
-  // カットイン（初回接続時は発火させない）
-  if (v.lastAction) {
-    if (FX.seq === null) FX.seq = v.lastAction.seq;
-    else if (v.lastAction.seq !== FX.seq) { FX.seq = v.lastAction.seq; showCutin(v.lastAction); }
+  // カットイン（初回接続時は発火させない／未再生ぶんを順番に再生）
+  const q = v.fxq && v.fxq.length ? v.fxq : (v.lastAction ? [v.lastAction] : []);
+  if (q.length) {
+    if (FX.seq === null) FX.seq = q[q.length - 1].seq; // 初回は過去分を流さない
+    else {
+      const pending = q.filter(e => e.seq > FX.seq);
+      if (pending.length) {
+        FX.seq = pending[pending.length - 1].seq;
+        enqueueCutins(pending);
+      }
+    }
   }
 
   $('roomTitle').textContent = v.title || '';
@@ -448,9 +485,9 @@ function render() {
   $('inviteHint').classList.toggle('hidden', !showInvite);
   if (showInvite) $('inviteHint').querySelector('.ih-code').textContent = `参加コード: ${v.code}`;
 
-  // 結果表示
+  // 結果表示（アクション演出が流れ終わってから出す）
   const rb = $('resultBox');
-  if (v.result && (v.phase === 'result')) {
+  if (v.result && (v.phase === 'result') && !cutinBusy) {
     rb.innerHTML = v.result.lines.map(l => `<div>${esc(l)}</div>`).join('');
     rb.classList.remove('hidden');
   } else rb.classList.add('hidden');
@@ -463,14 +500,16 @@ function render() {
   const seats = $('seats');
   seats.innerHTML = '';
   const n = v.players.length;
+  seats.className = n >= 7 ? 'compact' : ''; // 多人数はプレート/アバターを縮小
   const meIdx = you ? you.idx : 0;
   const posOf = (r, rx, ry) => {
     const th = Math.PI / 2 + (r * 2 * Math.PI) / n; // r=0 → 真下、時計回り
     return { x: 50 + rx * Math.cos(th), y: 50 + ry * Math.sin(th) };
   };
+  const SEAT_RX = 40, SEAT_RY = 44; // 席の楕円半径
   v.players.forEach((p, i) => {
     const r = (i - meIdx + n) % n;
-    const pos = posOf(r, 37, 44); // 縦長楕円に沿って配置
+    const pos = posOf(r, SEAT_RX, SEAT_RY); // 縦長楕円に沿って配置
     const seat = document.createElement('div');
     seat.className = 'tseat' + (i === v.turn && betting ? ' turn' : '') + (p.folded ? ' folded' : '') + (p.sitout ? ' sitout' : '');
     seat.style.left = pos.x + '%';
@@ -507,7 +546,7 @@ function render() {
     plate.className = 'plate';
     plate.innerHTML =
       `<div class="pnm"><span class="dot ${p.connected ? 'on' : 'off'}"></span>${esc(p.name)}${p.isDealerRole ? '🎩' : ''}</div>` +
-      `<div class="pstk">${fmt(p.stack)}<span class="plmini ${plCls}">${pl >= 0 ? '+' : ''}${fmt(pl)}</span></div>` +
+      `<div class="pstk">${fmtShort(p.stack)}<span class="plmini ${plCls}">${pl >= 0 ? '+' : ''}${fmtShort(pl)}</span></div>` +
       (eq != null ? `<div class="eqv${eq >= 50 ? ' lead' : ''}">${eq}%</div>` : '');
     seat.appendChild(plate);
 
@@ -546,6 +585,8 @@ function render() {
       seat.appendChild(say);
     } else if (p.sitout) {
       seat.appendChild(tag('離席'));
+    } else if (p.mucked) {
+      seat.appendChild(tag('マック', 'fold'));
     } else if (v.handNum && !p.inHand && betting) {
       seat.appendChild(tag('待ち'));
     } else if (p.lastAct && (betting || v.phase === 'showdown')) {
@@ -554,14 +595,15 @@ function render() {
     }
     seats.appendChild(seat);
 
-    // ベット額チップ（卓の内側に浮かせる）
+    // ベット額チップ：プレート帯とPOTの中間の「内側リング」に固定
+    // （席からの割合だと左右席でプレートに乗るため、独立した小さめ楕円に配置）
     if (p.streetBet > 0) {
-      const bpos = posOf(r, 21, 30);
+      const bpos = r === 0 ? posOf(r, 22, 26) : posOf(r, 25, 31);
       const bb = document.createElement('div');
       bb.className = 'bet-bubble';
       bb.style.left = bpos.x + '%';
       bb.style.top = bpos.y + '%';
-      bb.innerHTML = `<span class="chipicon"></span>${fmt(p.streetBet)}`;
+      bb.innerHTML = `<span class="chipicon"></span>${fmtShort(p.streetBet)}`;
       if (p.streetBet > (FX.bets[p.id] || 0)) bb.classList.add('bump');
       seats.appendChild(bb);
     }
@@ -611,12 +653,20 @@ function render() {
 
   // 卓下部のゲーム情報
   const fi = $('feltInfo');
-  if (fi) fi.textContent = `${v.mode === 'full' ? "NL HOLD'EM" : 'チップモード'} ・ ${v.sb}/${v.bb}`;
+  if (fi) {
+    let s = `${v.mode === 'full' ? "NL HOLD'EM" : 'チップモード'} ・ ${v.sb}/${v.bb}`;
+    if (v.ante) s += ` ・ ante ${v.ante}`;
+    if (v.streamMode) s += ' ・ 📺配信';
+    if (v.blindUpRemain != null) s += ` ・ UP ${Math.floor(v.blindUpRemain / 60)}:${String(v.blindUpRemain % 60).padStart(2, '0')}`;
+    fi.textContent = s;
+  }
 
   // アクションバー
   const myTurn = you && you.myTurn;
   if (myTurn && !FX.myTurn) { SND.turn(); try { navigator.vibrate && navigator.vibrate([120, 60, 120]); } catch {} }
   FX.myTurn = !!myTurn;
+  // 予約アクションがあれば手番到来時に自動実行（実行したら以降の描画はスキップ）
+  if (myTurn && runPreActionIfMyTurn(v)) return;
   $('turnBanner').classList.toggle('hidden', !myTurn);
   $('turnMeter').classList.toggle('hidden', !myTurn);
   $('actions').classList.toggle('hidden', !myTurn || raiseOpen);
@@ -628,16 +678,75 @@ function render() {
     if (you.canCheck) { cc.textContent = 'チェック'; cc.disabled = false; }
     else { cc.textContent = `コール ${fmt(you.toCall)}`; cc.disabled = false; }
     $('btnRaiseOpen').disabled = !you.canRaise;
-    // そのストリートに誰もまだ賭けていなければ「ベット」、既に賭けがあれば「レイズ」（プリフロップはブラインドがあるためレイズ）
     const isBet = v.phase !== 'preflop' && v.players.every(p => !p.streetBet);
     $('btnRaiseOpen').textContent = isBet ? 'ベット' : 'レイズ';
     $('btnRaise').textContent = isBet ? 'ベット' : 'レイズ';
   }
+  // 事前アクション：ハンド参加中で自分の番でない時だけ表示
+  const inHandNow = betting && you && you.stack >= 0 && v.players.find(p => p.you)?.inHand && !v.players.find(p => p.you)?.folded && !v.players.find(p => p.you)?.allIn;
+  const showPre = inHandNow && !myTurn;
+  $('preActions').classList.toggle('hidden', !showPre);
+  if (!showPre && preAction) clearPre();
+  if (showPre) {
+    // 次に自分が直面する状況で「チェック」が使えるかは未確定。両方出しておく
+    $('paCheckWrap').style.display = '';
+    $('paCallWrap').style.display = '';
+  }
+
+  // マック時の「見せる」ボタン（結果画面・自分がショーダウン参加者）
+  let showBtn = $('btnShowCards');
+  if (you && you.canShow) {
+    if (!showBtn) {
+      showBtn = document.createElement('button');
+      showBtn.id = 'btnShowCards';
+      showBtn.className = 'act call';
+      showBtn.textContent = '🃏 手札を見せる';
+      showBtn.onclick = () => act('showCards');
+      $('myInfo').after(showBtn);
+    }
+    showBtn.classList.remove('hidden');
+  } else if (showBtn) showBtn.classList.add('hidden');
+
+  // 自動離席からの復帰ボタン
+  let unsitBtn = $('btnUnsit');
+  if (you && you.sitout) {
+    if (!unsitBtn) {
+      unsitBtn = document.createElement('button');
+      unsitBtn.id = 'btnUnsit';
+      unsitBtn.className = 'act call';
+      unsitBtn.textContent = '▶ 着席する（ハンドに復帰）';
+      unsitBtn.onclick = () => act('unsit');
+      $('myInfo').after(unsitBtn);
+    }
+    unsitBtn.classList.remove('hidden');
+  } else if (unsitBtn) unsitBtn.classList.add('hidden');
+
+  // ハンド履歴
+  renderHistory(v);
 
   // ディーラーパネル
   renderDealer(v, you, betting);
   renderPotAssign(v, you);
   renderRit(v);
+}
+
+// ---------- ハンド履歴 ----------
+function renderHistory(v) {
+  const el = $('handHistory');
+  if (!el) return;
+  const hist = v.handHistory || [];
+  if (!hist.length) { el.innerHTML = '<div class="rl-empty">まだハンドがありません</div>'; return; }
+  el.innerHTML = hist.map(h => {
+    const boardStr = bd => (bd || []).map(c => c ? (RANK[c.r] || c.r) + SUIT[c.s] : '').join(' ');
+    const board = h.boards && h.boards.length > 1
+      ? h.boards.map((b, i) => `RUN${i + 1}: ${boardStr(b)}`).join(' / ')
+      : boardStr(h.board);
+    const hands = (h.hands || []).map(p => `${esc(p.name)} ${p.cards.map(c => (RANK[c.r] || c.r) + SUIT[c.s]).join('')}${p.hand ? '（' + p.hand + '）' : ''}`).join('、');
+    const win = (h.lines || []).filter(l => l.includes('獲得')).join(' / ');
+    return `<div class="hh-item"><div class="hh-head">#${h.handNum} <span class="hh-board">${esc(board)}</span></div>` +
+      (hands ? `<div class="hh-hands">${hands}</div>` : '') +
+      `<div class="hh-win">${esc(win)}</div></div>`;
+  }).join('');
 }
 
 // ---------- ランイット選択パネル ----------
@@ -698,6 +807,16 @@ function renderDealer(v, you, betting) {
       const bb = prompt('BB', v.bb); if (bb == null) return;
       act('setBlinds', { sb, bb });
     });
+    mk('アンティ変更', () => {
+      const ante = prompt('アンティ額（0=なし）', v.ante || 0); if (ante == null) return;
+      act('setAnte', { ante });
+    });
+    if (v.spectators > 0 || v.streamMode) {
+      mk(v.streamMode ? '🔒 配信モードOFF' : '📺 配信モードON', () => {
+        if (!v.streamMode && !confirm('配信モードをONにすると観戦者に全員の手札が見えます。共謀防止のため、信頼できる観戦者のみの時に使ってください。ONにしますか？')) return;
+        act('toggleStream');
+      });
+    }
   }
   if (v.mode === 'chip' && v.awaitDealer) mk('▶ 次のストリートへ（実カードを配ってから）', () => act('nextStreet'), 'go');
   if (betting && v.turn >= 0) {
@@ -830,6 +949,8 @@ $('btnCreate').onclick = async () => {
       mode: document.querySelector('input[name=mode]:checked').value,
       sb: $('sb').value, bb: $('bb').value, stack: $('stack').value,
       turnSec: $('turnSec').value,
+      ante: $('ante').value, blindUpMin: $('blindUpMin').value,
+      ritRule: document.querySelector('input[name=ritRule]:checked')?.value || 'min',
     });
     enter(j.code, j.pid);
   } catch (e) { showErr('createErr', e.message); }
@@ -948,19 +1069,58 @@ function updateRaiseQuick() {
   });
 }
 
+// スライダー位置(0-100) ⇔ レイズ額(minTo〜maxTo) の相互変換
+function sliderToAmount(pct) {
+  const y = S.view.you;
+  const raw = y.minTo + (y.maxTo - y.minTo) * (pct / 100);
+  return Math.max(y.minTo, Math.min(y.maxTo, Math.round(raw / 10) * 10));
+}
+function amountToSlider(amt) {
+  const y = S.view.you;
+  if (y.maxTo <= y.minTo) return 0;
+  return Math.max(0, Math.min(100, Math.round((amt - y.minTo) / (y.maxTo - y.minTo) * 100)));
+}
+function setRaiseAmount(amt) {
+  const y = S.view.you;
+  amt = Math.max(y.minTo, Math.min(y.maxTo, amt));
+  $('raiseTo').value = amt;
+  $('raiseSlider').value = amountToSlider(amt);
+}
 $('btnRaiseOpen').onclick = () => {
   raiseOpen = true;
   updateRaiseQuick();
-  // デフォルトは最初のボタン（基本2倍相当）
   const first = document.querySelector('.raise-quick button');
-  $('raiseTo').value = first ? first.dataset.to : S.view.you.minTo;
+  setRaiseAmount(first ? +first.dataset.to : S.view.you.minTo);
   render();
 };
 $('btnRaiseCancel').onclick = () => { raiseOpen = false; render(); };
 $('btnRaise').onclick = () => { raiseOpen = false; act('raise', { to: $('raiseTo').value }); };
+$('raiseSlider').oninput = () => { $('raiseTo').value = sliderToAmount(+$('raiseSlider').value); };
+$('raiseTo').oninput = () => { const v = +$('raiseTo').value; if (Number.isFinite(v)) $('raiseSlider').value = amountToSlider(v); };
 document.querySelectorAll('.raise-quick button').forEach(b => {
-  b.onclick = () => { if (b.dataset.to) $('raiseTo').value = b.dataset.to; };
+  b.onclick = () => { if (b.dataset.to) setRaiseAmount(+b.dataset.to); };
 });
+
+// ---------- 事前アクション（プリアクション） ----------
+let preAction = null; // 'checkfold' | 'check' | 'call'
+function clearPre() { preAction = null; ['paCheckFold', 'paCheck', 'paCall'].forEach(id => { const el = $(id); if (el) el.checked = false; }); }
+[['paCheckFold', 'checkfold'], ['paCheck', 'check'], ['paCall', 'call']].forEach(([id, kind]) => {
+  const el = $(id);
+  if (el) el.onchange = () => {
+    if (el.checked) { clearPre(); el.checked = true; preAction = kind; }
+    else preAction = null;
+  };
+});
+// 手番が来たら予約アクションを自動実行（renderから呼ばれる）
+function runPreActionIfMyTurn(v) {
+  const y = v.you;
+  if (!y || !y.myTurn || !preAction || raiseOpen) return false;
+  const p = preAction;
+  if (p === 'checkfold') { const t = y.canCheck ? 'check' : 'fold'; clearPre(); act(t); return true; }
+  if (p === 'check') { if (y.canCheck) { clearPre(); act('check'); return true; } clearPre(); return false; /* ベットが入ったら取消 */ }
+  if (p === 'call') { clearPre(); act(y.canCheck ? 'check' : 'call'); return true; }
+  return false;
+}
 
 // ---------- 復帰 ----------
 (() => {

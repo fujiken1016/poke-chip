@@ -53,8 +53,20 @@
         <div><label>BB</label><input id="bb" type="number" value="100" min="1"></div>
         <div><label>初期スタック</label><input id="stack" type="number" value="10000" min="100"></div>
       </div>
-      <label>アクション時間（秒）… 5〜300</label>
-      <input id="turnSec" type="number" value="20" min="5" max="300">
+      <div class="row three">
+        <div><label>アクション時間(秒)</label><input id="turnSec" type="number" value="20" min="5" max="300"></div>
+        <div><label>アンティ(任意)</label><input id="ante" type="number" value="0" min="0"></div>
+        <div><label>ブラインドUP(分)</label><input id="blindUpMin" type="number" value="0" min="0" placeholder="0=なし"></div>
+      </div>
+      <label>オールイン時のラン回数</label>
+      <div class="mode-select">
+        <label class="mode-opt"><input type="radio" name="ritRule" value="min" checked>
+          <span><b>少ない方を採用</b><small>全員の希望のうち少ない回数（安全）</small></span>
+        </label>
+        <label class="mode-opt"><input type="radio" name="ritRule" value="max">
+          <span><b>多い方を採用</b><small>一人でも多く希望すれば多い回数</small></span>
+        </label>
+      </div>
       <button id="btnCreate" class="primary wide">ルーム作成</button>
       <p id="createErr" class="err"></p>
     </div>
@@ -112,6 +124,12 @@
     <div id="ledger"></div>
   </details>
 
+  <!-- ハンド履歴 -->
+  <details class="panel">
+    <summary>🗂 ハンド履歴</summary>
+    <div id="handHistory"></div>
+  </details>
+
   <!-- ログ -->
   <details class="panel">
     <summary>📜 ログ</summary>
@@ -133,16 +151,23 @@
     </div>
     <div id="raiseRow" class="hidden">
       <div class="raise-quick">
-        <button data-q="third">1/3ポット</button>
-        <button data-q="half">1/2ポット</button>
-        <button data-q="pot">ポット</button>
+        <button data-q="0">—</button>
+        <button data-q="1">—</button>
+        <button data-q="2">—</button>
         <button data-q="allin">オールイン</button>
       </div>
+      <input id="raiseSlider" class="raise-slider" type="range" min="0" max="100" value="0">
       <div class="row">
         <input id="raiseTo" type="number" inputmode="numeric">
         <button id="btnRaise" class="primary">ベット</button>
         <button id="btnRaiseCancel" class="ghost">×</button>
       </div>
+    </div>
+    <!-- 事前アクション（手番前に予約） -->
+    <div id="preActions" class="hidden">
+      <label class="pa-opt"><input type="checkbox" id="paCheckFold"> チェック/フォールド</label>
+      <label class="pa-opt" id="paCheckWrap"><input type="checkbox" id="paCheck"> チェック</label>
+      <label class="pa-opt" id="paCallWrap"><input type="checkbox" id="paCall"> コール</label>
     </div>
   </footer>
   <p id="tableErr" class="err"></p>
