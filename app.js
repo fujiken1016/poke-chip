@@ -506,7 +506,7 @@ function render() {
     const th = Math.PI / 2 + (r * 2 * Math.PI) / n; // r=0 → 真下、時計回り
     return { x: 50 + rx * Math.cos(th), y: 50 + ry * Math.sin(th) };
   };
-  const SEAT_RX = 40, SEAT_RY = 44; // 席の楕円半径
+  const SEAT_RX = 40, SEAT_RY = 41; // 席の楕円半径（下段席がフッターに被らない高さ）
   v.players.forEach((p, i) => {
     const r = (i - meIdx + n) % n;
     const pos = posOf(r, SEAT_RX, SEAT_RY); // 縦長楕円に沿って配置
