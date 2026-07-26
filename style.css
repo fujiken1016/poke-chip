@@ -314,6 +314,15 @@ header {
 .tcards.mine { gap: 2px; }
 .tcards.mine .pcard:first-child { transform: rotate(-7deg) translate(2px, 1px); }
 .tcards.mine .pcard:last-child { transform: rotate(7deg) translate(-2px, 1px); }
+/* オマハ4枚（ボムポット）は小さめ＆詰めて4枚全部見せる */
+.tcards.mine:has(.pcard:nth-child(4)) { gap: 1px; }
+.tcards.mine:has(.pcard:nth-child(4)) .pcard.small { width: 30px; height: 42px; }
+.tcards.mine:has(.pcard:nth-child(4)) .pcard.small .crank { font-size: 18px; }
+.tcards.mine:has(.pcard:nth-child(4)) .pcard { transform: none !important; }
+/* ラビットで公開した残りボードは薄く（実際には出なかったカード） */
+.rabbit-card { opacity: .55; box-shadow: 0 2px 6px rgba(0,0,0,.4), inset 0 0 0 2px rgba(255,201,60,.5) !important; }
+/* ボムポットの上下ボードラベル */
+#board .board-row .run-label { color: #ffd76b; }
 .avatar {
   width: 46px; height: 46px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -376,7 +385,11 @@ header {
 .tseat .tag.bet { background: linear-gradient(100deg, #17c97a, #0d9a5a); color: #fff; box-shadow: 0 0 10px rgba(43, 255, 158, .45); }
 .tseat .tag.raise { background: var(--mag); color: #fff; box-shadow: 0 0 10px rgba(255, 46, 126, .5); }
 .tseat .tag.fold { background: #3a4364; color: #9aa7cc; }
+.tseat .tag.muck { background: #5a3a6e; color: #e0c6f5; } /* マックはフォールドと別色（紫系） */
 .tseat .tag.allin { background: linear-gradient(100deg, var(--mag), #b3123f); color: #fff; box-shadow: 0 0 12px rgba(255, 46, 126, .7); }
+/* 降りた後の自分の手札：席は薄暗いままカードだけ読める程度に持ち上げる */
+.tseat.folded { opacity: .5; }
+.tseat.folded .tcards.folded-cards { opacity: .95; filter: none; }
 /* どうする？吹き出し */
 .saybubble {
   position: absolute; top: -92px; left: 50%; transform: translateX(-50%); z-index: 7;
