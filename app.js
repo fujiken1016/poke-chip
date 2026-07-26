@@ -357,10 +357,10 @@ function showErr(id, msg) { $(id).textContent = msg; if (msg) setTimeout(() => {
 // ---------- カード描画 ----------
 const RANK = { 11: 'J', 12: 'Q', 13: 'K', 14: 'A' };
 const SUIT = { s: '♠', h: '♥', d: '♦', c: '♣' };
-function cardEl(c, small, deal, delay) {
+function cardEl(c, small, deal, delay, flip) {
   const d = document.createElement('div');
   d.className = 'pcard' + (small ? ' small' : '');
-  if (deal) { d.classList.add('deal'); if (delay) d.style.animationDelay = delay + 'ms'; }
+  if (deal) { d.classList.add(flip ? 'flipin' : 'deal'); if (delay) d.style.animationDelay = delay + 'ms'; }
   if (!c) { d.classList.add('back'); return d; }
   d.classList.add('s-' + c.s); // 4色デッキ（スートごとの地色）
   d.innerHTML = `<span class="csuit">${SUIT[c.s]}</span><span class="crank">${RANK[c.r] || c.r}</span>`;
@@ -494,12 +494,13 @@ function render() {
   board.innerHTML = '';
   if (v.mode === 'full') {
     if (v.bomb && v.board2) {
-      // ボムポット：上ボード/下ボードを2段表示
+      // ボムポット：上ボード/下ボードを2段表示（新カードは配布アニメ）
+      const prevB = v.board.length < FX.board ? 0 : FX.board;
       [['上', v.board], ['下', v.board2]].forEach(([lb, bd]) => {
         const row = document.createElement('div');
         row.className = 'board-row active';
         const l = document.createElement('span'); l.className = 'run-label'; l.textContent = lb; row.appendChild(l);
-        bd.forEach(c => row.appendChild(cardEl(c, true)));
+        bd.forEach((c, i) => row.appendChild(cardEl(c, true, i >= prevB, (i - prevB) * 110)));
         for (let i = bd.length; i < 5; i++) { const s = document.createElement('div'); s.className = 'slot'; s.style.width = '28px'; s.style.height = '39px'; row.appendChild(s); }
         board.appendChild(row);
       });
@@ -514,22 +515,24 @@ function render() {
         lb.className = 'run-label';
         lb.textContent = `RUN${k + 1}`;
         row.appendChild(lb);
-        bd.forEach(c => { row.appendChild(cardEl(c, true, total >= prev, (total - prev) * 130)); total++; });
+        bd.forEach(c => { const fl = v.phase === 'runout'; row.appendChild(cardEl(c, true, total >= prev, (total - prev) * (fl ? 260 : 130), fl)); total++; });
         board.appendChild(row);
       });
       if (total < FX.board) FX.board = 0;
       FX.board = total;
     } else if (v.rabbitBoard) {
-      // ラビット：残りボードを薄く表示（元のボード＋公開分）
+      // ラビット：残りボードを薄く表示（元のボード＋公開分。公開分はスローフリップで捲る）
       v.rabbitBoard.forEach((c, i) => {
-        const el = cardEl(c, false);
+        const el = cardEl(c, false, i >= FX.board, (i - FX.board) * 300, true);
         if (i >= v.board.length) el.classList.add('rabbit-card');
         board.appendChild(el);
       });
       FX.board = v.rabbitBoard.length;
     } else {
       if (v.board.length < FX.board) FX.board = 0; // 新ハンド等でリセット
-      v.board.forEach((c, i) => board.appendChild(cardEl(c, false, i >= FX.board, (i - FX.board) * 110)));
+      // オールイン・ランアウト中は裏面からのスローフリップ（通常ストリートは素早い配り）
+      const flip = v.phase === 'runout';
+      v.board.forEach((c, i) => board.appendChild(cardEl(c, false, i >= FX.board, (i - FX.board) * (flip ? 300 : 110), flip)));
       FX.board = v.board.length;
       // 空きスロット（ハンド中は5枠を常時表示）
       if (v.handNum && ['preflop', 'flop', 'turn', 'river', 'rit', 'runout', 'showdown'].includes(v.phase)) {
