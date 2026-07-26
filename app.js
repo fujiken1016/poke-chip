@@ -558,6 +558,17 @@ function render() {
   const online = v.players.filter(p => p.connected).length;
   $('playersHead').innerHTML = `<span>PLAYERS <b>${v.players.length}</b>/10${v.spectators ? ` ・👁 ${v.spectators}` : ''}</span><span class="oncount">🟢 オンライン ${online}</span>`;
 
+  // ディーラーの最重要ボタン「次のハンドを配る」を常にファーストビュー（ヘッダー直下の全幅バー）へ。
+  // 表示中は #table.qd でテーブル高さを同分縮め、上席カードの食み出しとも被らない
+  const canDeal = you && you.isDealer && (v.phase === 'lobby' || v.phase === 'result');
+  const qd = $('quickDeal');
+  qd.classList.toggle('hidden', !canDeal);
+  $('table').classList.toggle('qd', canDeal);
+  if (canDeal) {
+    qd.textContent = v.handNum ? '▶ 次のハンドを配る' : '▶ ハンドを開始';
+    qd.onclick = () => act('startHand');
+  }
+
   // ---- 楕円テーブル配置（自分が下中央） ----
   const seats = $('seats');
   seats.innerHTML = '';
@@ -690,6 +701,18 @@ function render() {
       db.textContent = 'D';
       seats.appendChild(db);
     }
+  });
+
+  // 端席の役ピル・プレートが画面外へ数px食み出す場合は内側へ寄せる（左右端席のクリップ防止。
+  // rAFは非表示タブで発火しないため同期実行。.tseat自体はtranslate(-50%,-50%)センタリングなので子要素側を寄せる）
+  document.querySelectorAll('#seats .handrank, #seats .plate').forEach(hr => {
+    hr.style.transform = '';
+    const hb = hr.getBoundingClientRect();
+    const pad = 3;
+    let dx = 0;
+    if (hb.left < pad) dx = pad - hb.left;
+    else if (hb.right > innerWidth - pad) dx = (innerWidth - pad) - hb.right;
+    if (dx) hr.style.transform = `translateX(${Math.round(dx)}px)`;
   });
 
   // ログ
