@@ -564,7 +564,7 @@ function runStep(room, token) {
     broadcast(room); // リバー時はここでエクイティが100%/0%になる
     return void setTimeout(() => runStep(room, token), 1400);
   }
-  awardRun(room);
+  const runWinners = awardRun(room);
   broadcast(room);
   if (room.runIdx + 1 < room.runN) {
     room.runIdx++;
@@ -574,6 +574,8 @@ function runStep(room, token) {
   room.result = { lines: room.runResults, reveal: true };
   room.pot = 0;
   recordHistory(room, null);
+  // ラン1回＆単独勝者ならオールイン決着でも2-7ボーナス対象（ラン複数は勝者がボード毎に変わるため対象外）
+  if (room.runN === 1 && runWinners.size === 1) check27Bonus(room, room.players.find(p => p.id === [...runWinners][0])?.pub);
   broadcast(room);
 }
 
@@ -584,6 +586,7 @@ function awardRun(room) {
     return room.runIdx === 0 ? amt - per * (room.runN - 1) : per; // 端数は1回目に寄せる
   };
   const scores = new Map();
+  const winnerSet = new Set();
   for (const p of activeOf(room)) scores.set(p.id, best7([...p.cards, ...room.board]));
   // このランの各自の役（マック以外）
   const handsLine = activeOf(room).map(p => `${p.name}=${describeHand(scores.get(p.id))}`).join(' / ');
@@ -605,6 +608,7 @@ function awardRun(room) {
       const q = room.players.find(x => x.id === id);
       q.stack += share + (rem > 0 ? 1 : 0);
       if (rem > 0) rem--;
+      winnerSet.add(id);
     }
     room.pot -= amt;
     runTotal += amt;
@@ -616,6 +620,7 @@ function awardRun(room) {
     addLog(room, line);
   }
   fx(room, 'win', topNames, runTotal);
+  return winnerSet;
 }
 
 function advanceStreet(room) {
