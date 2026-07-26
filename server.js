@@ -62,6 +62,18 @@ function best7(cards) {
 }
 const catOf = score => { let c = score; for (let i = 0; i < 5; i++) c = Math.floor(c / 15); return c; };
 
+// オマハ役判定：手札4枚から必ず2枚＋ボード3枚。C(4,2)×C(5,3)=60通りの最大
+function bestOmaha(hole, board) {
+  let best = -1;
+  for (let a = 0; a < hole.length; a++) for (let b = a + 1; b < hole.length; b++) {
+    for (let i = 0; i < board.length; i++) for (let j = i + 1; j < board.length; j++) for (let k = j + 1; k < board.length; k++) {
+      const s = eval5([hole[a], hole[b], board[i], board[j], board[k]]);
+      if (s > best) best = s;
+    }
+  }
+  return best;
+}
+
 // 役の詳細説明（例: ツーペア（A・K））
 const RANK_NAME = r => ({ 14: 'A', 13: 'K', 12: 'Q', 11: 'J', 10: '10' }[r] || String(r));
 function describeHand(score) {
@@ -168,21 +180,92 @@ function botStrength(room, p, iters = 150) {
   return win / iters;
 }
 
+// プリフロップのハンド強度（Chenフォーミュラ）— ポジション判断の基準
+function chenScore(cards) {
+  const [a, b] = cards[0].r >= cards[1].r ? cards : [cards[1], cards[0]];
+  const val = r => (r === 14 ? 10 : r === 13 ? 8 : r === 12 ? 7 : r === 11 ? 6 : r / 2);
+  let sc = val(a.r);
+  if (a.r === b.r) return Math.max(5, sc * 2);            // ペア
+  if (cards[0].s === cards[1].s) sc += 2;                 // スーテッド
+  const gap = a.r - b.r - 1;
+  sc -= gap >= 4 ? 5 : gap === 3 ? 4 : gap === 2 ? 2 : gap === 1 ? 1 : 0;
+  if (gap <= 1 && a.r < 12) sc += 1;                      // ストレートボーナス
+  return Math.round(sc);
+}
+
+// BOTの席ポジション（0=アーリー … 1=レイト/ボタン）。ハンド中固定＝参加者全員基準
+function botLateness(room, p) {
+  // 行動順の起点（プリフロップ=BBの左＝UTG、ポストフロップ=ボタンの左＝SB）
+  const startIdx = room.phase === 'preflop' ? room.bbIdx : room.button;
+  const order = [];
+  for (let k = 1; k <= room.players.length; k++) {
+    const q = room.players[(startIdx + k) % room.players.length];
+    if (q.inHand) order.push(q); // フォールド済みも席位置の基準として含める
+  }
+  if (order.length <= 1) return 1;
+  const idx = order.indexOf(p);
+  return idx < 0 ? 1 : idx / (order.length - 1);
+}
+
 function botAct(room, p) {
   const need = room.currentBet - p.streetBet;
-  const s = botStrength(room, p);
   const pot = room.pot + room.players.reduce((x, q) => x + q.streetBet, 0);
-  const rnd = crypto.randomInt(100) / 100;
+  const rnd = () => crypto.randomInt(1000) / 1000;
   const maxTo = p.streetBet + p.stack;
-  const raiseTo = size => Math.min(maxTo, Math.max(room.currentBet + room.minRaise, room.currentBet + Math.round(pot * size / 10) * 10));
+  const bb = room.bb;
+  const late = botLateness(room, p);                       // 0..1
+  const raises = room.streetRaises || 0;                    // 今ストリートのレイズ回数
+  const oppStacks = activeOf(room).filter(q => q !== p).map(q => q.stack + q.streetBet);
+  const effBB = (Math.min(p.stack + p.streetBet, Math.max(0, ...oppStacks)) || p.stack) / bb; // エフェクティブスタック(BB)
+  const raiseTo = frac => Math.min(maxTo, Math.max(room.currentBet + room.minRaise, room.currentBet + Math.round(pot * frac / 10) * 10));
+  const openTo = mult => Math.min(maxTo, Math.max(bb * 2, room.currentBet + room.minRaise, Math.round(bb * mult / 10) * 10));
   try {
+    // ===== プリフロップ：Chen＋ポジション＋3ベット＋エフェクティブスタック =====
+    if (room.phase === 'preflop') {
+      const sc = chenScore(p.cards);
+      // ショートスタック(≤12BB)はプッシュ/フォールド主体
+      if (effBB <= 12 && need > 0) {
+        if (sc >= 9 || (sc >= 7 && late > 0.6)) return playerAction(room, p, 'raise', { to: maxTo });
+        if (sc >= 8 && need <= bb * 2) return playerAction(room, p, 'call', {});
+        return playerAction(room, p, 'fold', {});
+      }
+      if (raises === 0) {
+        // 未オープン（自分がオープンできる）。レイトほど広く
+        const openReq = late > 0.66 ? 6 : late > 0.33 ? 8 : 10;
+        if (sc >= openReq) return playerAction(room, p, 'raise', { to: openTo(late > 0.66 ? 2.3 : 2.6) });
+        if (need <= 0) return playerAction(room, p, 'check', {}); // BBオプションでチェック
+        return playerAction(room, p, 'fold', {});
+      }
+      if (raises === 1) {
+        // 1つのオープンに直面 → 3ベット/コール/フォールド
+        const threeBetTo = Math.min(maxTo, Math.max(room.currentBet + room.minRaise, Math.round(room.currentBet * 3 / 10) * 10));
+        if (sc >= 12 && rnd() < 0.75) return playerAction(room, p, 'raise', { to: threeBetTo });
+        if (sc >= (late > 0.5 ? 8 : 9)) return playerAction(room, p, 'call', {});
+        return playerAction(room, p, need <= 0 ? 'check' : 'fold', {});
+      }
+      // 3ベット以上に直面 → プレミアムのみ
+      if (sc >= 16) return playerAction(room, p, 'raise', { to: Math.min(maxTo, Math.max(room.currentBet + room.minRaise, room.currentBet * 2.3)) });
+      if (sc >= 13) return playerAction(room, p, 'call', {});
+      return playerAction(room, p, need <= 0 ? 'check' : 'fold', {});
+    }
+
+    // ===== ポストフロップ：勝率(モンテカルロ)＋ポットオッズ＋SPR＋ポジション =====
+    const s = botStrength(room, p);
+    const spr = (p.stack + p.streetBet) / Math.max(bb, pot);   // スタック/ポット比
     if (need <= 0) {
-      if ((s > 0.7 && rnd < 0.7) || (s < 0.35 && rnd < 0.08)) return playerAction(room, p, 'raise', { to: raiseTo(s > 0.85 ? 0.9 : 0.55) });
+      // 誰も賭けていない：バリューベット/セミブラフ/チェック
+      const betReq = late > 0.5 ? 0.6 : 0.68;
+      if (s > betReq && rnd() < 0.8) return playerAction(room, p, 'raise', { to: raiseTo(s > 0.85 ? 0.75 : 0.55) });
+      if (s < 0.4 && late > 0.6 && rnd() < 0.28) return playerAction(room, p, 'raise', { to: raiseTo(0.5) }); // ブラフ
       return playerAction(room, p, 'check', {});
     }
+    // ベットに直面：ポットオッズと役の強さ
     const odds = need / (pot + need);
-    if (s > 0.85 && rnd < 0.65) return playerAction(room, p, 'raise', { to: raiseTo(0.8) });
-    if (s > odds * 0.95 || rnd < 0.02) return playerAction(room, p, 'call', {});
+    // 強い手はレイズ（SPRが低いほどコミット）
+    if (s > 0.82 && (raises < 2 || s > 0.9) && rnd() < 0.7) return playerAction(room, p, 'raise', { to: raiseTo(spr < 1.5 ? 1.2 : 0.85) });
+    if (s > odds + 0.06) return playerAction(room, p, 'call', {});
+    // たまにフロート/ブラフキャッチ
+    if (s > odds - 0.04 && late > 0.6 && raises < 2 && rnd() < 0.25) return playerAction(room, p, 'call', {});
     return playerAction(room, p, 'fold', {});
   } catch (e) {
     // サイズ不正等のフォールバック
@@ -191,12 +274,16 @@ function botAct(room, p) {
   }
 }
 
-function createRoom({ name, title, mode, sb, bb, stack, turnSec, ante, blindUpMin, ritRule }) {
+function createRoom({ name, title, mode, sb, bb, stack, turnSec, ante, blindUpMin, ritRule, rabbit, deuce7 }) {
   const room = {
     code: makeCode(), title, mode, sb, bb, startStack: stack,
     turnSeconds: turnSec,
     ante: ante || 0, blindUpMin: blindUpMin || 0, blindUpAt: null, ritRule: ritRule === 'max' ? 'max' : 'min',
     streamMode: false, // 観戦者に手札を全公開する配信モード
+    rabbit: !!rabbit,  // ラビットハント可否
+    deuce7: !!deuce7,  // 2-7ボーナス＆ボムポット可否
+    rabbitBoard: null, // 降りた後に見せる残りボード
+    bombNext: false, bomb: false, board2: [], // ボムポット（ダブルボード）
     handHistory: [],   // 直近ハンドの記録
     turnPid: null, turnDeadline: null, turnKey: null,
     players: [], dealerId: null,
@@ -298,19 +385,14 @@ function startHand(room) {
   room.ritChoices = null; room.ritDeadline = null;
   room.boards = null; room.runN = 1; room.runIdx = 0; room.baseBoard = null; room.runResults = null;
   room.allinReveal = false;
+  room.rabbitBoard = null; room.board2 = [];
+  room.bomb = !!room.bombNext; room.bombNext = false; // 前ハンドの2-7ボーナスで発動
   room.runToken++;
   for (const p of room.players) {
     p.inHand = eligible(p);
     p.folded = false; p.allIn = false;
     p.streetBet = 0; p.totalBet = 0;
     p.cards = []; p.acted = false; p.lastAct = null; p.reveal = false;
-  }
-  // アンティ徴収（参加者全員が支払い→ポットへ）
-  if (room.ante > 0) {
-    let anteTotal = 0;
-    for (const p of inHandOf(room)) { const a = Math.min(room.ante, p.stack); p.stack -= a; p.totalBet += a; anteTotal += a; }
-    room.pot += anteTotal;
-    if (anteTotal > 0) addLog(room, `アンティ ${room.ante} ×${inHandOf(room).length}人 → ポット +${anteTotal}`);
   }
   // ボタン移動（ディーラー指定があれば優先）
   if (room.buttonPin >= 0 && room.players[room.buttonPin]?.inHand) {
@@ -320,6 +402,33 @@ function startHand(room) {
   }
   room.buttonPin = -1;
   const inHand = inHandOf(room);
+
+  // ===== ボムポット（ダブルボード・4枚オマハ・フロップスタート） =====
+  if (room.bomb) {
+    const bp = Math.round(room.bb * 2.5); // 全員2.5bb回収
+    let potTotal = 0;
+    for (const p of inHand) { const a = Math.min(bp, p.stack); p.stack -= a; p.totalBet += a; potTotal += a; }
+    room.pot += potTotal;
+    room.sbIdx = -1; room.bbIdx = -1;
+    room.currentBet = 0; room.minRaise = room.bb; room.streetRaises = 0;
+    room.phase = 'flop';
+    for (const p of inHand) p.cards = [room.deck.pop(), room.deck.pop(), room.deck.pop(), room.deck.pop()]; // オマハ4枚
+    room.board = [room.deck.pop(), room.deck.pop(), room.deck.pop()];   // 上ボード フロップ
+    room.board2 = [room.deck.pop(), room.deck.pop(), room.deck.pop()];  // 下ボード フロップ
+    room.turn = nextIdx(room, room.button, p => p.inHand && !p.folded && !p.allIn); // ボタンの左から
+    fx(room, 'hand', null, null, `💣 BOMB POT #${room.handNum}`);
+    addLog(room, `💣 ボムポット発動！ ダブルボード・オマハ（4枚）・全員 ${bp} 回収 → ポット ${room.pot}`);
+    if (room.turn < 0 || bettingDone(room)) endBettingRound(room);
+    return;
+  }
+
+  // アンティ徴収（参加者全員が支払い→ポットへ）
+  if (room.ante > 0) {
+    let anteTotal = 0;
+    for (const p of inHand) { const a = Math.min(room.ante, p.stack); p.stack -= a; p.totalBet += a; anteTotal += a; }
+    room.pot += anteTotal;
+    if (anteTotal > 0) addLog(room, `アンティ ${room.ante} ×${inHand.length}人 → ポット +${anteTotal}`);
+  }
   if (inHand.length === 2) {
     room.sbIdx = room.button;
     room.bbIdx = nextIdx(room, room.button, p => p.inHand);
@@ -331,6 +440,7 @@ function startHand(room) {
   pay(room.players[room.bbIdx], room.bb);
   room.currentBet = room.bb;
   room.minRaise = room.bb;
+  room.streetRaises = 0; // 今ストリートのベット/レイズ回数（BOTの3ベット判定用。ブラインドは含めない）
   room.phase = 'preflop';
   if (room.mode === 'full') {
     for (const p of inHand) p.cards = [room.deck.pop(), room.deck.pop()];
@@ -367,6 +477,7 @@ function collectBets(room) {
   }
   room.currentBet = 0;
   room.minRaise = room.bb;
+  room.streetRaises = 0; // 新ストリートでリセット
   room.lastRaiseFull = true;
 }
 
@@ -374,8 +485,30 @@ function endBettingRound(room) {
   collectBets(room);
   if (activeOf(room).length <= 1) return awardToLast(room);
   // フルモード：ベット続行不能（オールイン対決）でボード未完成 → ランイット選択へ
-  if (room.mode === 'full' && canActOf(room).length < 2 && room.phase !== 'river') return startRit(room);
+  // （ボムポットはダブルボード固定なのでランイットは提供せず、自動で両ボード走らせる）
+  if (room.mode === 'full' && !room.bomb && canActOf(room).length < 2 && room.phase !== 'river') return startRit(room);
   advanceStreet(room);
+}
+
+// 2-7ボーナス判定：フロップ以降で単独勝者が 2 と 7 を持ってポット獲得 → 全員から2.5bb徴収＋次ハンドはボムポット
+function check27Bonus(room, winnerPub) {
+  if (!room.deuce7 || room.bomb) return;
+  if (room.board.length < 3) return;         // フロップ未到達（プリフロップ決着）は対象外
+  const w = room.players.find(p => p.pub === winnerPub);
+  if (!w || w.cards.length !== 2) return;
+  const ranks = w.cards.map(c => c.r).sort((a, b) => a - b);
+  if (!(ranks[0] === 2 && ranks[1] === 7)) return; // 2と7ちょうど
+  const bonus = Math.round(room.bb * 2.5);
+  let got = 0;
+  for (const p of room.players) {
+    if (p === w || p.stack <= 0) continue;
+    const a = Math.min(bonus, p.stack);
+    p.stack -= a; got += a;
+  }
+  w.stack += got;
+  room.bombNext = true;
+  addLog(room, `🎉 2-7ボーナス！ ${w.name} が2-7で勝利 → 全員から${bonus}徴収（計${got}）。次はボムポット！`);
+  fx(room, 'hand', w.name, null, '2-7 BONUS!');
 }
 
 // ---------- オールイン対決：ランイット選択 → 複数ランアウト ----------
@@ -492,6 +625,7 @@ function advanceStreet(room) {
   if (room.mode === 'full') {
     const n = room.phase === 'flop' ? 3 : 1;
     for (let i = 0; i < n; i++) room.board.push(room.deck.pop());
+    if (room.bomb) for (let i = 0; i < n; i++) room.board2.push(room.deck.pop()); // ボムポットは下ボードも配る
     addLog(room, `${PHASE_JA[room.phase]}`);
   }
   const ca = canActOf(room);
@@ -515,6 +649,7 @@ function awardToLast(room) {
   room.turn = -1;
   room.awaitDealer = false;
   recordHistory(room, null);
+  check27Bonus(room, winner.pub);
   room.phase = 'result';
 }
 
@@ -554,6 +689,20 @@ function splitPot(room, pot, winnerIds) {
   pot.winners = winnerIds;
 }
 
+// 指定額だけを勝者に分配（ボムポットの上/下ボード半々分配用）
+function awardAmount(room, amount, winnerIds) {
+  if (amount <= 0 || !winnerIds.length) return;
+  const share = Math.floor(amount / winnerIds.length);
+  let rem = amount - share * winnerIds.length;
+  let i = room.button;
+  const ordered = [];
+  for (let k = 0; k < room.players.length; k++) {
+    i = (i + 1) % room.players.length;
+    if (winnerIds.includes(room.players[i].id)) ordered.push(room.players[i]);
+  }
+  for (const w of ordered) { w.stack += share + (rem > 0 ? 1 : 0); if (rem > 0) rem--; }
+}
+
 // ハンド履歴の記録（直近15件）
 function recordHistory(room, scores) {
   const entry = {
@@ -576,6 +725,39 @@ function toShowdown(room) {
   room.turn = -1;
   room.pots = computePots(room);
   room.pot = 0;
+  // ===== ボムポット：各ポットを上ボード/下ボードで半分ずつ、オマハ判定で分配 =====
+  if (room.bomb) {
+    const act = activeOf(room);
+    const topS = new Map(), botS = new Map();
+    for (const p of act) { topS.set(p.id, bestOmaha(p.cards, room.board)); botS.set(p.id, bestOmaha(p.cards, room.board2)); }
+    const lines = [];
+    const winnerSet = new Set();
+    for (let pi = room.pots.length - 1; pi >= 0; pi--) {
+      const pot = room.pots[pi];
+      const cont = pot.eligible.filter(id => topS.has(id));
+      const half = Math.floor(pot.amount / 2);
+      const otherHalf = pot.amount - half;
+      const topBest = Math.max(...cont.map(id => topS.get(id)));
+      const topW = cont.filter(id => topS.get(id) === topBest);
+      const botBest = Math.max(...cont.map(id => botS.get(id)));
+      const botW = cont.filter(id => botS.get(id) === botBest);
+      awardAmount(room, half, topW);
+      awardAmount(room, otherHalf, botW);
+      [...topW, ...botW].forEach(id => winnerSet.add(id));
+      pot.winners = [...new Set([...topW, ...botW])];
+      const nm = ids => ids.map(id => room.players.find(p => p.id === id).name).join('・');
+      const label = room.pots.length > 1 ? (pi === 0 ? 'メイン' : `サイド${pi}`) : '';
+      lines.unshift(`${label}上ボード: ${nm(topW)} が ${half}（${describeHand(topBest)}）`);
+      lines.unshift(`${label}下ボード: ${nm(botW)} が ${otherHalf}（${describeHand(botBest)}）`);
+    }
+    for (const p of act) { p.reveal = true; lines.unshift(`${p.name}: ${p.cards.map(c => (({14:'A',13:'K',12:'Q',11:'J',10:'10'})[c.r]||c.r) + ({s:'♠',h:'♥',d:'♦',c:'♣'})[c.s]).join('')}`); }
+    room.result = { lines, reveal: true, winners: [...winnerSet].map(id => room.players.find(p => p.id === id)?.pub).filter(Boolean), bomb: true };
+    lines.forEach(l => addLog(room, l));
+    recordHistory(room, null);
+    fx(room, 'win', '', room.pots.reduce((s, x) => s + x.amount, 0));
+    room.phase = 'result';
+    return;
+  }
   if (room.mode === 'full') {
     const lines = [];
     const scores = new Map();
@@ -604,6 +786,8 @@ function toShowdown(room) {
     const w0 = room.pots[room.pots.length - 1];
     const wNames = w0.winners.map(id => room.players.find(p => p.id === id).name).join('・');
     fx(room, 'win', wNames, room.pots.reduce((s, x) => s + x.amount, 0));
+    // 2-7ボーナス（単独勝者のみ）
+    if (winnerSet.size === 1) check27Bonus(room, [...winnerSet].map(id => room.players.find(p => p.id === id)?.pub)[0]);
     room.phase = 'result';
   } else {
     room.phase = 'showdown';
@@ -690,6 +874,7 @@ function playerAction(room, p, act, data) {
     }
     const wasBet = room.currentBet === 0; // そのストリート最初の賭け＝ベット、以降＝レイズ
     room.currentBet = to;
+    room.streetRaises = (room.streetRaises || 0) + 1; // ベット/レイズ回数を加算（BOTの3ベット判定用）
     p.acted = true;
     p.lastAct = p.allIn ? 'ALL IN' : (wasBet ? 'ベット' : 'レイズ');
     addLog(room, `${p.name}: ${p.allIn ? 'オールイン' : wasBet ? 'ベット' : 'レイズ'} ${to}`);
@@ -787,10 +972,14 @@ function dealerAction(room, p, act, data) {
     }
     case 'addChips': {
       // リバイ/アドオン：バイイン累計に計上する正式な追加
-      if (HAND_ACTIVE.includes(room.phase)) throw new Error('ハンド進行中はチップを追加できません（テーブルステークス）。ハンド終了後に追加してください');
       const q = findP(room, data.playerId);
       const amt = Math.floor(Number(data.amount));
       if (!q || !Number.isFinite(amt) || amt <= 0) throw new Error('追加額が不正です');
+      // テーブルステークス：現在のハンドに参加中の人だけ、ハンド中の追加を禁止
+      // （バスト/離席/次ハンド待ちの人はポットに関係ないのでいつでも追加OK）
+      if (HAND_ACTIVE.includes(room.phase) && q.inHand && !q.folded) {
+        throw new Error('このプレイヤーはハンド参加中のため、ハンド終了後に追加してください（テーブルステークス）');
+      }
       q.stack += amt;
       q.buyIn += amt;
       addLog(room, `💰 ${q.name} にチップ追加 ${amt}（バイイン累計 ${q.buyIn} / 現在 ${q.stack}）`);
@@ -848,6 +1037,15 @@ function dealerAction(room, p, act, data) {
       const ante = Math.max(0, Math.floor(Number(data.ante) || 0));
       room.ante = ante;
       addLog(room, `アンティ変更: ${ante || 'なし'}`);
+      break;
+    }
+    case 'bombPot': {
+      // 次のハンドをボムポット（ダブルボード・オマハ）にする
+      if (room.mode !== 'full') throw new Error('ボムポットはフルモード専用です');
+      if (HAND_ACTIVE.includes(room.phase)) throw new Error('ハンド終了後に発動してください');
+      room.bombNext = true;
+      room.deuce7 = true; // ボムポットを使うなら関連ルールも有効化
+      addLog(room, '💣 ディーラーが次のハンドをボムポットに設定');
       break;
     }
     case 'kick': {
@@ -928,6 +1126,11 @@ function view(room, pid) {
   v.ante = room.ante; v.streamMode = room.streamMode; v.blindUpMin = room.blindUpMin;
   v.blindUpRemain = room.blindUpMin > 0 && room.blindUpAt ? Math.max(0, Math.round((room.blindUpAt - Date.now()) / 1000)) : null;
   v.handHistory = (room.handHistory || []).slice(0, 15);
+  // 新ルール関連
+  v.rabbit = room.rabbit; v.deuce7 = room.deuce7;
+  v.bomb = room.bomb; v.bombNext = room.bombNext;
+  v.board2 = room.bomb ? room.board2 : null;
+  v.rabbitBoard = room.rabbitBoard;
   if (me) {
     const need = Math.max(0, room.currentBet - me.streetBet);
     v.you = {
@@ -942,6 +1145,8 @@ function view(room, pid) {
       sitout: me.sitout,
       // ショーダウンで自分がマックしている＝「見せる」ボタンを出せる
       canShow: room.phase === 'result' && me.inHand && !me.folded && !me.reveal && !allinExposed,
+      // ラビット：ハンド終了後、参加していた人がボード未完成なら見られる
+      canRabbit: room.rabbit && room.phase === 'result' && !room.bomb && !room.rabbitBoard && room.board.length < 5 && me.cards.length > 0,
     };
   }
   return v;
@@ -1123,7 +1328,7 @@ const server = http.createServer(async (req, res) => {
       const ante = Math.max(0, Math.min(bb, Math.floor(Number(b.ante) || 0)));
       const blindUpMin = Math.max(0, Math.min(120, Math.floor(Number(b.blindUpMin) || 0)));
       const ritRule = b.ritRule === 'max' ? 'max' : 'min';
-      const { room, p } = createRoom({ name, title, mode, sb, bb, stack, turnSec, ante, blindUpMin, ritRule });
+      const { room, p } = createRoom({ name, title, mode, sb, bb, stack, turnSec, ante, blindUpMin, ritRule, rabbit: !!b.rabbit, deuce7: !!b.deuce7 });
       broadcast(room);
       return json(res, 200, { code: room.code, pid: p.id });
     }
@@ -1167,9 +1372,9 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { ok: true });
       }
       const PLAYER_ACTS = ['fold', 'check', 'call', 'raise'];
-      const DEALER_ACTS = ['startHand', 'nextStreet', 'assignPot', 'proxyAct', 'setBet', 'adjustPot', 'adjustStack', 'addChips', 'addBot', 'setBlinds', 'setButton', 'setAnte', 'cancelHand', 'transferDealer', 'toggleSit', 'toggleStream', 'kick', 'undo'];
-      const SELF_ACTS = ['showCards', 'unsit']; // 自分自身への操作（誰でも可）
-      const ACT_JA = { fold: 'フォールド', check: 'チェック', call: 'コール', raise: 'レイズ', startHand: 'ハンド開始', nextStreet: 'ストリート進行', assignPot: 'ポット授与', proxyAct: '代理アクション', setBet: 'ベット修正', adjustPot: 'ポット修正', adjustStack: 'チップ修正', addChips: 'チップ追加', addBot: 'BOT追加', setBlinds: 'ブラインド変更', setButton: 'ボタン指定', setAnte: 'アンティ変更', cancelHand: 'ハンド中止', transferDealer: 'ディーラー交代', toggleSit: '離席/着席', toggleStream: '配信モード切替', kick: '退出', leaveRoom: '退出', showCards: '手札公開', unsit: '着席' };
+      const DEALER_ACTS = ['startHand', 'nextStreet', 'assignPot', 'proxyAct', 'setBet', 'adjustPot', 'adjustStack', 'addChips', 'addBot', 'setBlinds', 'setButton', 'setAnte', 'bombPot', 'cancelHand', 'transferDealer', 'toggleSit', 'toggleStream', 'kick', 'undo'];
+      const SELF_ACTS = ['showCards', 'unsit', 'rabbit']; // 自分自身への操作（誰でも可）
+      const ACT_JA = { fold: 'フォールド', check: 'チェック', call: 'コール', raise: 'レイズ', startHand: 'ハンド開始', nextStreet: 'ストリート進行', assignPot: 'ポット授与', proxyAct: '代理アクション', setBet: 'ベット修正', adjustPot: 'ポット修正', adjustStack: 'チップ修正', addChips: 'チップ追加', addBot: 'BOT追加', setBlinds: 'ブラインド変更', setButton: 'ボタン指定', setAnte: 'アンティ変更', bombPot: 'ボムポット発動', cancelHand: 'ハンド中止', transferDealer: 'ディーラー交代', toggleSit: '離席/着席', toggleStream: '配信モード切替', kick: '退出', leaveRoom: '退出', showCards: '手札公開', unsit: '着席', rabbit: 'ラビット' };
       let snapped = false;
       try {
         if (PLAYER_ACTS.includes(b.type)) {
@@ -1188,6 +1393,17 @@ const server = http.createServer(async (req, res) => {
           // 自動離席からの自己復帰
           p.sitout = false; p.timeoutStreak = 0;
           addLog(room, `${p.name} が着席`);
+        } else if (b.type === 'rabbit') {
+          // ラビットハント：ハンド終了後、参加していた人が残りボードを見る
+          if (!room.rabbit) throw new Error('このルームはラビット無効です');
+          if (room.phase !== 'result') throw new Error('ハンド終了後のみ');
+          if (room.bomb) throw new Error('ボムポットはラビット不可');
+          if (room.board.length >= 5) throw new Error('ボードは既に出揃っています');
+          if (!p.cards.length) throw new Error('このハンドの参加者のみ');
+          const rb = room.board.slice();
+          while (rb.length < 5 && room.deck.length) rb.push(room.deck.pop());
+          room.rabbitBoard = rb;
+          addLog(room, `🐇 ${p.name} がラビット：残りボードを公開`);
         } else if (b.type === 'leaveRoom') {
           snapshot(room, `${p.name}: 退出`); snapped = true;
           leaveRoom(room, p);
