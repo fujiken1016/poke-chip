@@ -266,6 +266,28 @@ header {
   0% { opacity: 0; transform: translateY(-14px) scale(.75); }
   100% { opacity: 1; transform: none; }
 }
+/* オールイン・ランアウト用のスローフリップ（裏面でタメ→横反転で公開） */
+.pcard.flipin { animation: flipin .85s ease-in-out backwards; }
+.pcard.flipin::before {
+  content: '◆'; position: absolute; inset: 0; z-index: 2; border-radius: inherit;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(170deg, #33509f, #1f3574);
+  box-shadow: inset 0 0 0 2px rgba(0, 229, 255, .35);
+  color: rgba(0, 229, 255, .35); font-size: 16px;
+  animation: flipback .85s backwards; animation-delay: inherit;
+  animation-timing-function: step-end;
+}
+@keyframes flipin {
+  0% { transform: scaleX(1); }
+  42% { transform: scaleX(1); }   /* 裏面のまま少しタメる */
+  58% { transform: scaleX(.06); } /* 反転の瞬間 */
+  76% { transform: scaleX(1.08); }
+  100% { transform: scaleX(1); }
+}
+@keyframes flipback {
+  0%, 57% { opacity: 1; }
+  58%, 100% { opacity: 0; }
+}
 .slot {
   width: 40px; height: 56px; border-radius: 7px;
   background: rgba(0, 0, 0, .25);
