@@ -164,8 +164,25 @@ header {
 .hdr-right { flex: none; display: flex; gap: 6px; align-items: center; }
 
 #playersHead {
-  display: flex; justify-content: space-between; padding: 8px 16px 0;
+  display: flex; justify-content: space-between; align-items: center; padding: 8px 16px 0;
   font-size: 11px; color: var(--dim); font-weight: 800; font-style: italic; letter-spacing: 2px;
+}
+/* ディーラー用クイック「次のハンドを配る」バー（ヘッダー直下・全幅・フロー配置）。
+   表示中は #table.qd 側でテーブル高さを縮めて総高さを保つ */
+#quickDeal {
+  display: block; margin: 6px 14px 14px; width: calc(100% - 28px);
+  padding: 8px 0; border-radius: 999px; border: none; cursor: pointer;
+  font-size: 13.5px; font-weight: 900; font-style: italic; letter-spacing: 2px;
+  background: linear-gradient(150deg, var(--green), #0da05f); color: #04240f;
+  box-shadow: 0 0 14px rgba(43, 255, 158, .4);
+  animation: qdPulse 2.2s ease-in-out infinite;
+  position: relative; z-index: 6;
+}
+#quickDeal.hidden { display: none; }
+#table.qd #tableWrap { height: clamp(240px, calc(100dvh - 306px), 560px); }
+@keyframes qdPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(43, 255, 158, .3); }
+  50% { box-shadow: 0 0 16px rgba(43, 255, 158, .6); }
 }
 #playersHead b { color: var(--neon); }
 #playersHead .oncount { font-style: normal; letter-spacing: 0; }
