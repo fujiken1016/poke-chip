@@ -52,6 +52,49 @@ const SND = {
 };
 const CUTIN_SND = { fold: 'fold', check: 'check', call: 'chip', bet: 'bigchip', raise: 'bigchip', allin: 'allin', win: 'win', phase: 'phase', hand: 'phase' };
 
+// ---------- BGM（WebAudio合成のかっこいいループ・著作権フリー） ----------
+let bgmOn = localStorage.getItem('pokechip_bgm') === '1';
+let bgmTimer = null, bgmStep = 0, bgmGain = null;
+function bgmNote(f, t, dur, type, g, filter) {
+  const a = ac();
+  const o = a.createOscillator(), v = a.createGain();
+  o.type = type; o.frequency.value = f;
+  let node = o;
+  if (filter) { const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = filter; o.connect(lp); node = lp; }
+  v.gain.setValueAtTime(0, t);
+  v.gain.linearRampToValueAtTime(g, t + 0.02);
+  v.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  node.connect(v); v.connect(bgmGain);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+function bgmKick(t) {
+  const a = ac(); const o = a.createOscillator(), v = a.createGain();
+  o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+  v.gain.setValueAtTime(0.5, t); v.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+  o.connect(v); v.connect(bgmGain); o.start(t); o.stop(t + 0.2);
+}
+// ダークでクールな8ステップ・ループ（Am系）
+const BGM_BASS = [110, 0, 82.4, 0, 98, 0, 65.4, 0];          // A2 E2 G2 C2
+const BGM_ARP = [[440, 523, 659], null, [392, 494, 587], null, [349, 440, 523], null, [330, 415, 523], null];
+function bgmTick() {
+  if (!bgmOn) return;
+  const a = ac(); const t = a.currentTime + 0.05;
+  const s = bgmStep % 8;
+  if (s % 2 === 0) bgmKick(t);
+  const bass = BGM_BASS[s]; if (bass) bgmNote(bass, t, 0.42, 'sawtooth', 0.16, 500);
+  const arp = BGM_ARP[s]; if (arp) arp.forEach((f, i) => bgmNote(f, t + i * 0.06, 0.5, 'triangle', 0.05, 2200));
+  if (s === 6) bgmNote(1318, t, 0.3, 'sine', 0.03, 3000); // 高音のアクセント
+  bgmStep++;
+}
+function bgmStart() {
+  if (bgmTimer) return;
+  const a = ac();
+  bgmGain = a.createGain(); bgmGain.gain.value = 0.5; bgmGain.connect(a.destination);
+  bgmStep = 0; bgmTick();
+  bgmTimer = setInterval(bgmTick, 300); // ~200BPM 8分
+}
+function bgmStop() { if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; } if (bgmGain) { try { bgmGain.disconnect(); } catch {} bgmGain = null; } }
+
 // ---------- アクションクロック（横棒メーター・ローカル描画） ----------
 setInterval(() => {
   const meters = document.querySelectorAll('.tmeter');
@@ -450,7 +493,18 @@ function render() {
   const board = $('board');
   board.innerHTML = '';
   if (v.mode === 'full') {
-    if (v.boards && v.boards.length > 1) {
+    if (v.bomb && v.board2) {
+      // ボムポット：上ボード/下ボードを2段表示
+      [['上', v.board], ['下', v.board2]].forEach(([lb, bd]) => {
+        const row = document.createElement('div');
+        row.className = 'board-row active';
+        const l = document.createElement('span'); l.className = 'run-label'; l.textContent = lb; row.appendChild(l);
+        bd.forEach(c => row.appendChild(cardEl(c, true)));
+        for (let i = bd.length; i < 5; i++) { const s = document.createElement('div'); s.className = 'slot'; s.style.width = '28px'; s.style.height = '39px'; row.appendChild(s); }
+        board.appendChild(row);
+      });
+      FX.board = v.board.length;
+    } else if (v.boards && v.boards.length > 1) {
       let total = 0;
       const prev = FX.board;
       v.boards.forEach((bd, k) => {
@@ -465,6 +519,14 @@ function render() {
       });
       if (total < FX.board) FX.board = 0;
       FX.board = total;
+    } else if (v.rabbitBoard) {
+      // ラビット：残りボードを薄く表示（元のボード＋公開分）
+      v.rabbitBoard.forEach((c, i) => {
+        const el = cardEl(c, false);
+        if (i >= v.board.length) el.classList.add('rabbit-card');
+        board.appendChild(el);
+      });
+      FX.board = v.rabbitBoard.length;
     } else {
       if (v.board.length < FX.board) FX.board = 0; // 新ハンド等でリセット
       v.board.forEach((c, i) => board.appendChild(cardEl(c, false, i >= FX.board, (i - FX.board) * 110)));
@@ -516,8 +578,10 @@ function render() {
     seat.style.top = pos.y + '%';
 
     // 手札：自分は表向きで扇形（GG風）、相手は裏面（公開時は表）
+    // 自分だけはフォールド後も薄く手札を表示（何を降りたか確認できる）
     const tc = document.createElement('div');
     tc.className = 'tcards';
+    const showMineFolded = p.you && p.folded && v.mode === 'full' && (you?.cards?.length) && v.handNum;
     if (v.handNum && p.inHand && !p.folded && (v.mode === 'full' ? p.cards.length : true)) {
       if (v.mode === 'full') {
         const cs = p.you ? (you?.cards || p.cards) : p.cards;
@@ -528,6 +592,9 @@ function render() {
         tc.appendChild(cardEl(null, true));
         tc.appendChild(cardEl(null, true));
       }
+    } else if (showMineFolded) {
+      tc.classList.add('mine', 'up', 'folded-cards');
+      (you.cards).forEach(c => tc.appendChild(cardEl(c, true)));
     }
     seat.appendChild(tc);
 
@@ -550,8 +617,8 @@ function render() {
       (eq != null ? `<div class="eqv${eq >= 50 ? ' lead' : ''}">${eq}%</div>` : '');
     seat.appendChild(plate);
 
-    // 現在の手役ピル（カードが見えているプレイヤーのみ・GGの "Two Pair" 相当）
-    if (v.mode === 'full' && p.inHand && !p.folded && p.cards.length && (p.you ? you?.cards?.length : p.cards[0])) {
+    // 現在の手役ピル（カードが見えているプレイヤーのみ・GGの "Two Pair" 相当。ボムポット=オマハ2ボードは非表示）
+    if (!v.bomb && v.mode === 'full' && p.inHand && !p.folded && p.cards.length && (p.you ? you?.cards?.length : p.cards[0])) {
       const ht = handText([...(p.you ? you.cards : p.cards), ...v.board]);
       if (ht) {
         const hr = document.createElement('div');
@@ -586,7 +653,11 @@ function render() {
     } else if (p.sitout) {
       seat.appendChild(tag('離席'));
     } else if (p.mucked) {
-      seat.appendChild(tag('マック', 'fold'));
+      // ショーダウンまで残ったが手札を見せなかった＝マック（フォールドとは別）
+      seat.appendChild(tag('マック', 'muck'));
+    } else if (v.phase === 'result' && p.folded && v.handNum) {
+      // 途中で降りた人は結果画面でも「フォールド」と表示（マックと区別）
+      seat.appendChild(tag('フォールド', 'fold'));
     } else if (v.handNum && !p.inHand && betting) {
       seat.appendChild(tag('待ち'));
     } else if (p.lastAct && (betting || v.phase === 'showdown')) {
@@ -642,7 +713,8 @@ function render() {
   if (you) {
     $('myStack').textContent = fmt(you.stack);
     if (mh) {
-      const ht = v.mode === 'full' && you.cards.length ? handText([...you.cards, ...v.board]) : '';
+      // ボムポット（オマハ2ボード）は単純な役表示ができないので非表示
+      const ht = !v.bomb && v.mode === 'full' && you.cards.length ? handText([...you.cards, ...v.board]) : '';
       mh.textContent = ht;
       mh.classList.toggle('hidden', !ht);
     }
@@ -654,8 +726,8 @@ function render() {
   // 卓下部のゲーム情報
   const fi = $('feltInfo');
   if (fi) {
-    let s = `${v.mode === 'full' ? "NL HOLD'EM" : 'チップモード'} ・ ${v.sb}/${v.bb}`;
-    if (v.ante) s += ` ・ ante ${v.ante}`;
+    let s = v.bomb ? `💣 BOMB POT ・ ダブルボード・オマハ` : `${v.mode === 'full' ? "NL HOLD'EM" : 'チップモード'} ・ ${v.sb}/${v.bb}`;
+    if (v.ante && !v.bomb) s += ` ・ ante ${v.ante}`;
     if (v.streamMode) s += ' ・ 📺配信';
     if (v.blindUpRemain != null) s += ` ・ UP ${Math.floor(v.blindUpRemain / 60)}:${String(v.blindUpRemain % 60).padStart(2, '0')}`;
     fi.textContent = s;
@@ -720,6 +792,20 @@ function render() {
     }
     unsitBtn.classList.remove('hidden');
   } else if (unsitBtn) unsitBtn.classList.add('hidden');
+
+  // ラビットボタン（降りた後・ボード未完成）
+  let rabBtn = $('btnRabbit');
+  if (you && you.canRabbit) {
+    if (!rabBtn) {
+      rabBtn = document.createElement('button');
+      rabBtn.id = 'btnRabbit';
+      rabBtn.className = 'act call';
+      rabBtn.textContent = '🐇 ラビット（残りのボードを見る）';
+      rabBtn.onclick = () => act('rabbit');
+      $('myInfo').after(rabBtn);
+    }
+    rabBtn.classList.remove('hidden');
+  } else if (rabBtn) rabBtn.classList.add('hidden');
 
   // ハンド履歴
   renderHistory(v);
@@ -815,6 +901,12 @@ function renderDealer(v, you, betting) {
       mk(v.streamMode ? '🔒 配信モードOFF' : '📺 配信モードON', () => {
         if (!v.streamMode && !confirm('配信モードをONにすると観戦者に全員の手札が見えます。共謀防止のため、信頼できる観戦者のみの時に使ってください。ONにしますか？')) return;
         act('toggleStream');
+      });
+    }
+    if (v.mode === 'full') {
+      mk(v.bombNext ? '💣 ボムポット予約済み' : '💣 次をボムポット', () => {
+        if (v.bombNext) return;
+        if (confirm('次のハンドをボムポット（ダブルボード・4枚オマハ・全員2.5bb）にしますか？')) act('bombPot');
       });
     }
   }
@@ -951,6 +1043,7 @@ $('btnCreate').onclick = async () => {
       turnSec: $('turnSec').value,
       ante: $('ante').value, blindUpMin: $('blindUpMin').value,
       ritRule: document.querySelector('input[name=ritRule]:checked')?.value || 'min',
+      rabbit: $('ruleRabbit').checked, deuce7: $('ruleDeuce7').checked,
     });
     enter(j.code, j.pid);
   } catch (e) { showErr('createErr', e.message); }
@@ -1011,6 +1104,17 @@ $('btnMute').onclick = () => {
   renderMute();
 };
 renderMute();
+// BGM切替
+function renderBgm() { const b = $('btnBgm'); if (b) b.style.opacity = bgmOn ? '1' : '.45'; }
+if ($('btnBgm')) $('btnBgm').onclick = () => {
+  bgmOn = !bgmOn;
+  localStorage.setItem('pokechip_bgm', bgmOn ? '1' : '0');
+  if (bgmOn) bgmStart(); else bgmStop();
+  renderBgm();
+};
+renderBgm();
+// 最初のタップでBGMが有効なら開始（ブラウザの自動再生制限対策）
+document.addEventListener('pointerdown', () => { if (bgmOn) bgmStart(); }, { once: true });
 $('btnLeave').onclick = async () => {
   const y = S.view?.you;
   if (!y) {
