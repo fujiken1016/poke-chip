@@ -640,3 +640,8 @@ footer {
 }
 .cutin-band.k-win .cutin-text { font-size: 34px; }
 @keyframes shake { 0%, 100% { margin-top: 0; } 25% { margin-top: -5px; } 75% { margin-top: 5px; } }
+
+/* ホーム画面フッターリンク（プライバシー/運営者情報） */
+.home-links { text-align: center; font-size: 11px; color: #6b7aa8; margin: 26px 0 10px; line-height: 2; }
+.home-links a { color: #8fa2d6; text-decoration: none; }
+.home-links a:active { color: #7fdcff; }
