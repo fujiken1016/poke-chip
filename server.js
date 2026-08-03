@@ -1273,6 +1273,13 @@ function readBody(req) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   res.setHeader('Access-Control-Allow-Origin', '*');
+  // 旧URL(poke-chip.onrender.com)→新ドメインへ301。ページ読み込みのみ対象にし、
+  // 旧URLで進行中セッションの /api・/events は切らない
+  if ((req.headers.host || '').endsWith('.onrender.com') && req.method === 'GET'
+      && !url.pathname.startsWith('/api') && url.pathname !== '/events') {
+    res.writeHead(301, { Location: 'https://chip.mainichi-lab.com' + url.pathname + url.search });
+    return res.end();
+  }
   try {
     if (req.method === 'GET' && url.pathname === '/events') {
       const room = rooms.get((url.searchParams.get('code') || '').toUpperCase());
