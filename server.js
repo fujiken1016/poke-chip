@@ -1257,6 +1257,14 @@ function broadcast(room) {
 // ---------- HTTP ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
+// 配信を許可する静的ファイル（許可リスト方式）。
+// フラット配置デプロイでは PUB がリポジトリ直下になるため、パスをそのまま読むと
+// README.md / package.json / server.js / render.yaml / .git/ まで URL で読めてしまう。
+// ここに列挙したファイル名と完全一致するものだけを配信し、それ以外は 404 にする。
+// ファイル名に区切り文字を含めないので、パストラバーサルは構造的に成立しない。
+// ※ public/ に新しいファイルを追加したら、ここにも追記すること（未登録は 404 になる）。
+const STATIC_FILES = new Set(['index.html', 'app.js', 'style.css', 'about.html', 'privacy.html']);
+
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(obj));
@@ -1434,9 +1442,10 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
-    // 静的ファイル
-    let fp = path.join(PUB, url.pathname === '/' ? 'index.html' : url.pathname);
-    if (!fp.startsWith(PUB)) { res.writeHead(403); return res.end(); }
+    // 静的ファイル（許可リストに載っているものだけ配信）
+    const name = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+    if (!STATIC_FILES.has(name)) { res.writeHead(404); return res.end('not found'); }
+    const fp = path.join(PUB, name);
     fs.readFile(fp, (err, data) => {
       if (err) { res.writeHead(404); return res.end('not found'); }
       res.writeHead(200, {
