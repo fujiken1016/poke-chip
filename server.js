@@ -1263,7 +1263,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 // ここに列挙したファイル名と完全一致するものだけを配信し、それ以外は 404 にする。
 // ファイル名に区切り文字を含めないので、パストラバーサルは構造的に成立しない。
 // ※ public/ に新しいファイルを追加したら、ここにも追記すること（未登録は 404 になる）。
-const STATIC_FILES = new Set(['index.html', 'app.js', 'style.css', 'about.html', 'privacy.html']);
+const STATIC_FILES = new Set(['index.html', 'app.js', 'style.css', 'about.html', 'privacy.html', 'oc.js']);
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
