@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://chip.mainichi-lab.com/sitemap.xml
