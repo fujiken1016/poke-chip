@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://chip.mainichi-lab.com/sitemap.xml
+# 2026-09-14: sitemap は置かない。全ページが <meta name="robots" content="noindex, follow">
+# （司令塔 裁定37）なので、送信する URL が1本も無い。noindex を読ませるためクロールは許可する。
