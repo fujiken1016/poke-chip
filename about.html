@@ -27,6 +27,8 @@
   p, li, td, th { word-break: auto-phrase; text-wrap: pretty; }
   /* 2026-09-14: 320px では h1(30px) の「プライバシーポリシー」が入りきらず最終行に1字だけ残る（実測 必要298px/使える280px）。
      28px なら収まり、かつ 本文14px の 2.0倍（design_guidelines の下限）を満たす。 */
+  /* 2026-09-14: 表内のメールリンクは 320px で41pxしか無かった（実測）。単独のリンクは48px以上（§5-2） */
+  td a[href^="mailto"] { display: inline-flex; align-items: center; min-height: 48px; }
   @media (max-width: 359px) { h1 { font-size: 28px; } }
 </style>
 <!-- Google AdSense -->
