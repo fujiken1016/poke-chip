@@ -19,6 +19,10 @@
   .date { color: #9fadd6; font-size: 14px; }
   .foot { margin-top: 36px; border-top: 1px solid #23305c; padding-top: 8px; }
   .foot a { display: inline-flex; align-items: center; min-height: 48px; font-size: 14px; margin-right: 18px; }
+  /* 2026-09-14: 日本語は文節でだけ折る（design_guidelines §3-B）。
+     auto-phrase で文節境界を入れてから balance/pretty で均す。balance 単独は単語を割る。 */
+  h1, h2 { word-break: auto-phrase; text-wrap: balance; }
+  p, li, td, th { word-break: auto-phrase; text-wrap: pretty; }
 </style>
 <!-- Google AdSense -->
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8289616283786904" crossorigin="anonymous"></script>
