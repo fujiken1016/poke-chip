@@ -25,6 +25,9 @@
      auto-phrase で文節境界を入れてから balance/pretty で均す。balance 単独は単語を割る。 */
   h1, h2 { word-break: auto-phrase; text-wrap: balance; }
   p, li, td, th { word-break: auto-phrase; text-wrap: pretty; }
+  /* 2026-09-14: 320px では h1(30px) の「プライバシーポリシー」が入りきらず最終行に1字だけ残る（実測 必要298px/使える280px）。
+     28px なら収まり、かつ 本文14px の 2.0倍（design_guidelines の下限）を満たす。 */
+  @media (max-width: 359px) { h1 { font-size: 28px; } }
 </style>
 <!-- Google AdSense -->
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8289616283786904" crossorigin="anonymous"></script>
