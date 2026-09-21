@@ -38,7 +38,11 @@ body {
 button, .pa-opt, .mode-opt, .spec-check, summary, input { touch-action: manipulation; }
 body { overscroll-behavior-y: contain; -webkit-text-size-adjust: 100%; }
 /* iOSでフォーム文字が拡大されない最小サイズ（16px）を確保して意図しないズームを防ぐ */
-input[type="number"], input[type="text"] { font-size: 16px; }
+/* 🔴 2026-09-20: `input[type="text"]` は **type 属性を書いていない input にマッチしない**。
+   #name / #joinCode / #roomTitleInput は type 無しなので 15px（body継承）のままで、
+   375px 実測で iOS 自動ズーム対象3件として検出された。:not([type]) を足して塞ぐ。
+   チェックボックス/ラジオは対象外にしておく（寸法が変わるため）。 */
+input[type="number"], input[type="text"], input:not([type]) { font-size: 16px; }
 /* 縦が短い端末（iPhone SE等）ではフッターと文字を少し詰める */
 @media (max-height: 700px) {
   header { padding: 6px 10px; }
