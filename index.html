@@ -29,6 +29,7 @@
   <div class="home-inner">
     <h1>POKE CHIP<span class="logo-ja">ポケチップ</span></h1>
     <p class="tagline">スマホがチップになる。トランプがなくてもポーカー。</p>
+    <figure class="home-hero"><img src="/hero.webp" srcset="/hero-640.webp 640w, /hero.webp 1280w" sizes="(max-width: 430px) 100vw, 390px" width="1280" height="731" alt="緑のフェルトの丸いポーカーテーブルに、カードとチップが並ぶイラスト" fetchpriority="high" decoding="async"></figure>
 
     <label>ニックネーム</label>
     <input id="name" maxlength="12" placeholder="例: フジケン" autocomplete="off">
@@ -87,6 +88,16 @@
       <button id="btnCreate" class="primary wide">ルーム作成</button>
       <p id="createErr" class="err"></p>
     </div>
+
+    <section class="howto" aria-labelledby="howtoTitle">
+      <h2 id="howtoTitle">遊び方は3ステップ</h2>
+      <ol class="howto-list">
+        <li><img src="/step1.webp" width="320" height="240" alt="チップの横に置かれたスマホのイラスト" loading="lazy" decoding="async"><div><b>1. ルームを作る</b><span>ディーラー役がブラインドと持ち点を決めてルーム作成。</span></div></li>
+        <li><img src="/step2.webp" width="320" height="240" alt="光の輪の上に並んだ4台のスマホのイラスト" loading="lazy" decoding="async"><div><b>2. 招待リンクを送る</b><span>🔗 ボタンのURLをLINEなどで共有。アプリのインストールは不要です。</span></div></li>
+        <li><img src="/step3.webp" width="320" height="240" alt="フェルトの上のカードと積まれたチップのイラスト" loading="lazy" decoding="async"><div><b>3. 配って遊ぶ</b><span>カード配布・ポット計算・役の判定はアプリが自動で。</span></div></li>
+      </ol>
+      <p class="howto-note">画像はイメージ（AI生成のイラスト）です。</p>
+    </section>
 
     <p class="home-note">チップは<b>ゲーム内の点数</b>です。金銭的価値はなく、現金その他の財物のやり取り・換金は一切できません。</p>
     <p class="home-links"><a href="/about.html">運営者情報</a> ・ <a href="/privacy.html">プライバシーポリシー</a> ・ <a href="/disclaimer.html">免責事項</a> ・ <a href="/contact.html">お問い合わせ</a> ・ <a href="https://mainichi-lab.com/" rel="noopener">毎日ラボ</a><br>© 2026 毎日ラボ</p>

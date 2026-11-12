@@ -1255,7 +1255,7 @@ function broadcast(room) {
 }
 
 // ---------- HTTP ----------
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml; charset=utf-8' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml; charset=utf-8' };
 
 // 配信を許可する静的ファイル（許可リスト方式）。
 // フラット配置デプロイでは PUB がリポジトリ直下になるため、パスをそのまま読むと
@@ -1263,7 +1263,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 // ここに列挙したファイル名と完全一致するものだけを配信し、それ以外は 404 にする。
 // ファイル名に区切り文字を含めないので、パストラバーサルは構造的に成立しない。
 // ※ public/ に新しいファイルを追加したら、ここにも追記すること（未登録は 404 になる）。
-const STATIC_FILES = new Set(['index.html', 'app.js', 'style.css', 'about.html', 'privacy.html', 'disclaimer.html', 'contact.html', 'oc.js', 'robots.txt']);
+const STATIC_FILES = new Set(['index.html', 'app.js', 'style.css', 'about.html', 'privacy.html', 'disclaimer.html', 'contact.html', 'oc.js', 'robots.txt', 'hero.webp', 'hero-640.webp', 'step1.webp', 'step2.webp', 'step3.webp']);
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -1450,7 +1450,7 @@ const server = http.createServer(async (req, res) => {
       if (err) { res.writeHead(404); return res.end('not found'); }
       res.writeHead(200, {
         'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream',
-        'Cache-Control': 'no-cache', // HTML/JS/CSSの食い違い（古いキャッシュ）防止
+        'Cache-Control': path.extname(fp) === '.webp' ? 'public, max-age=86400' : 'no-cache', // HTML/JS/CSSの食い違い（古いキャッシュ）防止。画像だけ1日キャッシュ
       });
       res.end(data);
     });

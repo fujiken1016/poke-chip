@@ -28,6 +28,8 @@
   /* 2026-09-14: 320px では h1(30px) の「プライバシーポリシー」が入りきらず最終行に1字だけ残る（実測 必要298px/使える280px）。
      28px なら収まり、かつ 本文14px の 2.0倍（design_guidelines の下限）を満たす。 */
   @media (max-width: 359px) { h1 { font-size: 28px; } }
+  /* 2026-11-12 週次デザイン：ページ冒頭にアプリの絵（16:9・角丸16） */
+  .pg-eye { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 16px; border: 1px solid #23305c; margin-bottom: 16px; }
 </style>
 <!-- Google AdSense -->
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8289616283786904" crossorigin="anonymous"></script>
@@ -37,6 +39,7 @@
 </head>
 <body>
 <main>
+  <a href="/" aria-label="ポケチップのトップへ"><img class="pg-eye" src="/hero-640.webp" width="640" height="366" alt="ポケチップ：緑のフェルトの丸いポーカーテーブルに、カードとチップが並ぶイラスト（AI生成のイメージ）" decoding="async"></a>
   <h1>免責事項</h1>
   <p class="date">制定日: 2026年9月14日</p>
 

@@ -30,6 +30,8 @@
   /* 2026-09-14: 表内のメールリンクは 320px で41pxしか無かった（実測）。単独のリンクは48px以上（§5-2） */
   td a[href^="mailto"] { display: inline-flex; align-items: center; min-height: 48px; }
   @media (max-width: 359px) { h1 { font-size: 28px; } }
+  /* 2026-11-12 週次デザイン：ページ冒頭にアプリの絵（16:9・角丸16） */
+  .pg-eye { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 16px; border: 1px solid #23305c; margin-bottom: 16px; }
 </style>
 <!-- Google AdSense -->
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8289616283786904" crossorigin="anonymous"></script>
@@ -39,6 +41,7 @@
 </head>
 <body>
 <main>
+  <a href="/" aria-label="ポケチップのトップへ"><img class="pg-eye" src="/hero-640.webp" width="640" height="366" alt="ポケチップ：緑のフェルトの丸いポーカーテーブルに、カードとチップが並ぶイラスト（AI生成のイメージ）" decoding="async"></a>
   <h1>運営者情報</h1>
   <table>
     <tr><th>サービス名</th><td>ポケチップ（POKE CHIP）</td></tr>
